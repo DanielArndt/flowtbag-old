@@ -14,6 +14,13 @@ Contributors:
 from scapy.all import *
 from Flow import Flow
 
+def sort_by_IP(self, t):
+    if (t[2] < t[0]):
+        new_tuple = (t[2], t[3], t[0], t[1], t[4])
+    else:
+        new_tuple = t
+    return new_tuple
+
 class Flowtbag:
     '''
     classdocs
@@ -53,7 +60,7 @@ class Flowtbag:
         dstport = pkt.dport
         proto = pkt.proto
         flow_tuple = (srcip, srcport, dstip, dstport, proto)
-        flow_tuple = self.sortIPs(flow_tuple)
+        flow_tuple = sort_by_IP(flow_tuple)
 
         if (pkt.proto == 6):
             # TCP
@@ -64,7 +71,7 @@ class Flowtbag:
             else:
                 print "Adding packet %d to flow %s" % \
                     (self.count, self.active_flows[flow_tuple])
-                self.active_flows[flow_tuple].add(pkt)
+                self.active_flows[flow_tuple].add_to_flow(pkt)
             #print "%s" % (flow_tuple,)
             #print "TCP Flags: %s" % (pkt[TCP].flags)
             #flags=pkt.sprintf("%TCP.flags%")
@@ -73,13 +80,6 @@ class Flowtbag:
             # UDP
             print "UDP: [SPort %s | DPort %s]" % \
                 (pkt.sport, pkt.dport)
-
-    def sortIPs(self, t):
-        if (t[2] < t[0]):
-            new_tuple = (t[2], t[3], t[0], t[1], t[4])
-        else:
-            new_tuple = t
-        return new_tuple
 
 if __name__ == '__main__':
     Flowtbag()

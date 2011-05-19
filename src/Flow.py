@@ -79,7 +79,7 @@ class Flow:
         return "[%d:(%s,%d,%s,%d,%d)]" % \
             (self.id, self.srcip, self.srcport, self.dstip, self.dstport, self.proto)
 
-    def add(self, pkt):
+    def add_to_flow(self, pkt):
         """Adds a packet to the current flow. 
         
         This method adds the provided packet to the flow.  

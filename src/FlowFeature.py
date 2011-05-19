@@ -16,11 +16,15 @@ class FlowFeature:
         self.name = name # Name of the feature
         self.desc = desc # Description of the feature
         self.bi_dir = bi_dir # Is the flow bi-directional?
-        
+
+    def add_to_value(self, amt, reverse=False):
+        if reverse:
+            self.rvalue += amt
+
     def __repr__(self):
         # TODO: Write this
         return ""
-    
-    def __repr__(self):
+
+    def __str__(self):
         # TODO: Write this
         return ""
