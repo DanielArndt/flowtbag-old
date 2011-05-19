@@ -21,9 +21,24 @@
 '''
 
 from scapy.all import *
+import logging
 from Flow import Flow
 
+#Set up logging system.
+log = logging.getLogger()
+log.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+formatter = logging.Formatter("%(asctime)s;%(levelname)s:%(message)s",
+                              "%H:%M:%S")
+ch.setFormatter(formatter)
+log.addHandler(ch)
+
+
 def sort_by_IP(t):
+    """
+    Re-arrange a flow tuple to have lowest IP first, for lookup
+    """
     if (t[2] < t[0]):
         new_tuple = (t[2], t[3], t[0], t[1], t[4])
     else:
@@ -31,9 +46,9 @@ def sort_by_IP(t):
     return new_tuple
 
 class Flowtbag:
-    '''
+    """
     classdocs
-    '''
+    """
     def __init__(self, filename="test.cap"):
         try:
             self.count = 0
@@ -58,11 +73,11 @@ class Flowtbag:
             pkt: The packet to be processed
         """
         self.count += 1
-        if (IP not in pkt):
+        if (IP not in pkt) or (pkt.proto not in (6,19)):
             # Ignore non-IP packets
-            print "Ignoring non-IP packet %d" % (self.count)
+            log.debug("Ignoring non-IP/TCP/UDP packet %d" % (self.count))
             return
-        print "Processing packet %d" % (self.count)
+        log.debug("Processing packet %d" % (self.count))
         srcip = pkt[IP].src
         srcport = pkt.sport
         dstip = pkt[IP].dst
@@ -70,25 +85,16 @@ class Flowtbag:
         proto = pkt.proto
         flow_tuple = (srcip, srcport, dstip, dstport, proto)
         flow_tuple = sort_by_IP(flow_tuple)
-
-        if (pkt.proto == 6):
-            # TCP
-            if (flow_tuple not in self.active_flows):
-                self.flow_count += 1
-                self.active_flows[flow_tuple] = Flow(pkt, self.flow_count)
-                print "Created flow %d" % (self.flow_count)
-            else:
-                print "Adding packet %d to flow %s" % \
-                    (self.count, self.active_flows[flow_tuple])
-                self.active_flows[flow_tuple].add_to_flow(pkt)
-            #print "%s" % (flow_tuple,)
-            #print "TCP Flags: %s" % (pkt[TCP].flags)
-            #flags=pkt.sprintf("%TCP.flags%")
-            #print "%s" % (flags)
-        elif (pkt.proto == 17):
-            # UDP
-            print "UDP: [SPort %s | DPort %s]" % \
-                (pkt.sport, pkt.dport)
+        if (flow_tuple not in self.active_flows):
+            self.flow_count += 1
+            self.active_flows[flow_tuple] = Flow(pkt, self.flow_count)
+            log.debug("Created flow %d" % (self.flow_count))
+        else:
+            flow = self.active_flows[flow_tuple]
+            log.debug("Adding packet %d to flow %s" % \
+                (self.count, repr(flow)))
+            flow.add_to_flow(pkt)
+            log.debug("At: %s" % (flow))
 
 if __name__ == '__main__':
     Flowtbag()

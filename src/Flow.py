@@ -23,15 +23,18 @@
 from scapy.all import *
 
 class Flow:
-    '''
+    """
     classdocs
-    '''
+    """
     def __init__(self, pkt, id):
-        '''
+        """
         Constructor
-        '''
+        """
+        # Set initial values
         self.id = id
         self.first_packet = pkt
+        self.valid = False
+        
         # Basic flow identification criteria
         self.srcip = pkt[IP].src
         self.srcport = pkt.sport
@@ -40,9 +43,9 @@ class Flow:
         self.proto = pkt.proto
         #
         self.total_fpackets = 1
-        #self.total_fvolume
+        self.total_fvolume = pkt.len
         self.total_bpackets = 0
-        #self.total_bvolume
+        self.total_bvolume = 0
         #self.min_fpktl
         #self.mean_fpktl
         #self.max_fpktl
@@ -84,23 +87,43 @@ class Flow:
             (self.id, self.srcip, self.srcport, self.dstip, self.dstport, self.proto)
 
     def __str__(self):
-        return "[%d:(%s,%d,%s,%d,%d)]" % \
-            (self.id, self.srcip, self.srcport, self.dstip, self.dstport, self.proto)
+        return ','.join(map(str,[
+                        self.id, 
+                        self.total_fpackets, self.total_fvolume, 
+                        self.total_bpackets, self.total_bvolume]))
+        
+    def update_status(self, pkt):
+        """Updates the status of a flow.
+        
+        """
+        # Skip if the 
+        if pkt.proto == 19:
+            # UDP
+            # Skip if already labeled valid
+            if self.valid: return
+            # Check if a packet has been received from backward direction. One
+            # packet has already been sent in forward direction to initiate.
+            if (self.total_bpackets > 0):
+                self.valid = True
+        elif pkt.proto == 6:
+            # TCP
+            print "TCP"
+            
 
     def add_to_flow(self, pkt):
         """Adds a packet to the current flow. 
         
-        This method adds the provided packet to the flow.  
+        This function adds the provided packet to the flow.  
         
         Args:
             pkt: The packet to be added
         """
+        length = pkt.len
         if (pkt[IP].src == self.first_packet[IP].src):
             # Packet is traveling in the forward direction
             self.total_fpackets += 1
+            self.total_fvolume += length
         else:
             # Packet is traveling in the backward direction
             self.total_bpackets += 1
-
-    #def export(self):
-    #    return "(%d, %s, %d, %s, %d)" % (self.id, self.first_packet)
+            self.total_bvolume += length
