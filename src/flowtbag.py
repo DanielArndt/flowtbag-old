@@ -23,7 +23,7 @@
 from scapy.all import *
 from Flow import Flow
 
-def sort_by_IP(self, t):
+def sort_by_IP(t):
     if (t[2] < t[0]):
         new_tuple = (t[2], t[3], t[0], t[1], t[4])
     else:

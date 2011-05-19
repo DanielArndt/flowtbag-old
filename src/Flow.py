@@ -39,7 +39,6 @@ class Flow:
         self.dstport = pkt.dport
         self.proto = pkt.proto
         #
-
         self.total_fpackets = 1
         #self.total_fvolume
         self.total_bpackets = 0
@@ -97,10 +96,10 @@ class Flow:
             pkt: The packet to be added
         """
         if (pkt[IP].src == self.first_packet[IP].src):
-            # Packet is travelling in the forward direction
+            # Packet is traveling in the forward direction
             self.total_fpackets += 1
         else:
-            # Packet is travelling in the backward direction
+            # Packet is traveling in the backward direction
             self.total_bpackets += 1
 
     #def export(self):
