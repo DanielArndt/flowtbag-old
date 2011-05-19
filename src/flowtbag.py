@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+#!/usr/bin/python
 
 '''
 Copyright (c) 2011 Daniel Arndt and others.
@@ -8,46 +8,11 @@ this distribution (please see the LICENSE file), and is available at
 http://www.eclipse.org/legal/epl-v10.html
 Contributors:
 
-@author: Daniel Arndt
+@author: Daniel Arndt <danielarndt@gmail.com>
 '''
 
 from scapy.all import *
-
-class Flow:
-    '''
-    classdocs
-    '''
-    def __init__(self, pkt, id):
-        '''
-        Constructor
-        '''
-        self.id = id
-        self.first_packet = pkt
-        # Basic identification criteria
-        self.srcip = pkt[IP].src
-        self.srcport = pkt.sport
-        self.dstip = pkt[IP].dst
-        self.dstport = pkt.dport
-        self.proto = pkt.proto
-        #
-        
-        self.total_fpackets = 1
-        self.total_bpackets = 0
-    
-    def __repr__(self):
-        return "[%d:(%s,%d,%s,%d,%d)]" % \
-            (self.id, self.srcip, self.srcport,self.dstip,self.dstport,self.proto) 
-        
-    def __str__(self):
-        return "[%d:(%s,%d,%s,%d,%d)]" % \
-            (self.id, self.srcip, self.srcport,self.dstip,self.dstport,self.proto) 
-        
-    def add(self, pkt):
-        self.total_fpackets += 1
-        self.total_bpackets += 1
-        
-    #def export(self):
-    #    return "(%d, %s, %d, %s, %d)" % (self.id, self.first_packet)
+from Flow import Flow
 
 class Flowtbag:
     '''
@@ -61,13 +26,13 @@ class Flowtbag:
             sniff(offline=filename, prn=self.callback, store=0)
         except KeyboardInterrupt:
             exit(0)
-            
+
     def __repr__(self):
         return "A flowtbag"
-        
+
     def __str__(self):
         return "flowtbag"
-            
+
     def callback(self, pkt):
         """The callback function to be used to process each packet
         
@@ -75,11 +40,6 @@ class Flowtbag:
         
         Args:
             pkt: The packet to be processed
-            
-        Returns:
-        
-        Raises:
-    
         """
         self.count += 1
         if (IP not in pkt):
@@ -113,13 +73,13 @@ class Flowtbag:
             # UDP
             print "UDP: [SPort %s | DPort %s]" % \
                 (pkt.sport, pkt.dport)
-    
+
     def sortIPs(self, t):
         if (t[2] < t[0]):
-            new_tuple = (t[2],t[3],t[0],t[1], t[4])
+            new_tuple = (t[2], t[3], t[0], t[1], t[4])
         else:
             new_tuple = t
         return new_tuple
-    
+
 if __name__ == '__main__':
     Flowtbag()
