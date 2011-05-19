@@ -1,4 +1,4 @@
----1. License-------------------------------------------------------------------
+1. License----------------------------------------------------------------------
 
    Copyright 2011 Daniel Arndt
 
@@ -18,7 +18,9 @@
 
    Author: Daniel Arndt
 
----2. Purpose-------------------------------------------------------------------
+2. Purpose----------------------------------------------------------------------
 
-The purpose of this program is to calculate flow statistics from a given capture
-file. Flowtbag was designed with offline processing in mind.  
+   The purpose of this program is to calculate flow statistics from a given 
+   capture file. Flowtbag was designed with offline processing in mind. Since 
+   flowtbag is implemented using Python and the Scapy module, one cannot expect 
+   high efficiency.
