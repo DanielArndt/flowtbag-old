@@ -39,11 +39,7 @@ def sort_by_IP(t):
     """
     Re-arrange a flow tuple to have lowest IP first, for lookup
     """
-    if (t[2] < t[0]):
-        new_tuple = (t[2], t[3], t[0], t[1], t[4])
-    else:
-        new_tuple = t
-    return new_tuple
+    return (t[2], t[3], t[0], t[1], t[4]) if t[2] < t[0] else t
 
 class Flowtbag:
     """
@@ -73,7 +69,7 @@ class Flowtbag:
             pkt: The packet to be processed
         """
         self.count += 1
-        if (IP not in pkt) or (pkt.proto not in (6,19)):
+        if (IP not in pkt) or (pkt.proto not in (6, 19)):
             # Ignore non-IP packets
             log.debug("Ignoring non-IP/TCP/UDP packet %d" % (self.count))
             return
