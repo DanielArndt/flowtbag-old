@@ -83,8 +83,9 @@ class Flowtbag:
         flow_tuple = sort_by_IP(flow_tuple)
         if flow_tuple not in self.active_flows:
             self.flow_count += 1
-            self.active_flows[flow_tuple] = Flow(pkt, self.flow_count)
-            log.debug("Created flow %s" % (self.active_flows[flow_tuple]))
+            flow = Flow(pkt, self.flow_count)
+            self.active_flows[flow_tuple] = flow
+            log.debug("Created flow %s" % (flow))
         else:
             flow = self.active_flows[flow_tuple]
             log.debug("Adding packet %d to flow %s" % \

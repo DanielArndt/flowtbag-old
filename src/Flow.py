@@ -21,9 +21,34 @@
 '''
 
 from scapy.all import *
+log = logging.getLogger()
 
-# TODO: Can I do this? What are the implications?
-from flowtbag import log
+class TCP_STATE(object):
+    def update(self, input):
+        try:
+            return eval(self.tr[input])()
+        except:
+            return self
+
+class TCP_START(TCP_STATE):
+    tr = {"S":"TCP_SYN"}
+    def __str__(self):
+        return "TCP_START"
+
+class TCP_SYN(TCP_STATE):
+    tr = {"SA":"TCP_SYNACK"}
+    def __str__(self):
+        return "TCP_SYN"
+
+class TCP_SYNACK(TCP_STATE):
+    tr = {"A":"TCP_ESTABLISHED"}
+    def __str__(self):
+        return "TCP_SYNACK"
+
+class TCP_ESTABLISHED(TCP_STATE):
+    pass
+    def __str__(self):
+        return "TCP_ESTABLISHED"
 
 class Flow:
     """
@@ -37,7 +62,10 @@ class Flow:
         self.id = id
         self.first_packet = pkt
         self.valid = False
-
+        if pkt.proto == 6:
+            self.state = TCP_START()
+        # Set the initial status of the flow
+        self.update_status(pkt)
         # Basic flow identification criteria
         self.srcip = pkt[IP].src
         self.srcport = pkt.sport
@@ -85,6 +113,7 @@ class Flow:
         #self.total_fhlen
         #self.total_bhlen
 
+
     def __repr__(self):
         return "[%d:(%s,%d,%s,%d,%d)]" % \
             (self.id, self.srcip, self.srcport, self.dstip, self.dstport, self.proto)
@@ -97,8 +126,10 @@ class Flow:
 
     def update_tcp_state(self, pkt):
         # Update the TCP connection state
-        log.debug("Updating TCP connection state of %s" % (self))
-        raise NotImplementedError()
+        flags = pkt.sprintf("%TCP.flags%")
+        log.debug("FLAGS: %s" % (flags))
+        self.state = self.state.update(flags)
+        log.debug("Updating TCP connection state  to %s" % (self.state))
 
     def update_status(self, pkt):
         """Updates the status of a flow.
@@ -117,10 +148,8 @@ class Flow:
             # TCP
             if not self.valid:
                 #Check validity
-                print ""
+                pass
             self.update_tcp_state(pkt)
-
-
 
     def add_to_flow(self, pkt):
         """Adds a packet to the current flow. 
@@ -139,3 +168,4 @@ class Flow:
             # Packet is traveling in the backward direction
             self.total_bpackets += 1
             self.total_bvolume += length
+        self.update_status(pkt)
