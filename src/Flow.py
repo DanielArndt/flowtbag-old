@@ -22,6 +22,9 @@
 
 from scapy.all import *
 
+# TODO: Can I do this? What are the implications?
+from flowtbag import log
+
 class Flow:
     """
     classdocs
@@ -34,7 +37,7 @@ class Flow:
         self.id = id
         self.first_packet = pkt
         self.valid = False
-        
+
         # Basic flow identification criteria
         self.srcip = pkt[IP].src
         self.srcport = pkt.sport
@@ -87,11 +90,16 @@ class Flow:
             (self.id, self.srcip, self.srcport, self.dstip, self.dstport, self.proto)
 
     def __str__(self):
-        return ','.join(map(str,[
-                        self.id, 
-                        self.total_fpackets, self.total_fvolume, 
+        return ','.join(map(str, [
+                        self.id,
+                        self.total_fpackets, self.total_fvolume,
                         self.total_bpackets, self.total_bvolume]))
-        
+
+    def update_tcp_state(self, pkt):
+        # Update the TCP connection state
+        log.debug("Updating TCP connection state of %s" % (self))
+        raise NotImplementedError()
+
     def update_status(self, pkt):
         """Updates the status of a flow.
         
@@ -99,16 +107,20 @@ class Flow:
         # Skip if the 
         if pkt.proto == 19:
             # UDP
-            # Skip if already labeled valid
+            # Skip if already labelled valid
             if self.valid: return
             # Check if a packet has been received from backward direction. One
             # packet has already been sent in forward direction to initiate.
-            if (self.total_bpackets > 0):
+            if self.total_bpackets > 0:
                 self.valid = True
         elif pkt.proto == 6:
             # TCP
-            print "TCP"
-            
+            if not self.valid:
+                #Check validity
+                print ""
+            self.update_tcp_state(pkt)
+
+
 
     def add_to_flow(self, pkt):
         """Adds a packet to the current flow. 
