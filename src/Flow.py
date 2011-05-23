@@ -25,30 +25,28 @@ log = logging.getLogger()
 
 class TCP_STATE(object):
     def update(self, input):
+        next_state = [ s for f, s in self.tr if f(input)  ]
         try:
-            return eval(self.tr[input])()
+            return eval(next_state[0])()
         except:
+            # Default to no transition
             return self
 
-class TCP_START(TCP_STATE):
-    tr = {"S":"TCP_SYN"}
     def __str__(self):
-        return "TCP_START"
+        return self.__class__.__name__
+
+class TCP_START(TCP_STATE):
+    tr = [(lambda x: x.find("S") >= 0, "TCP_SYN")]
 
 class TCP_SYN(TCP_STATE):
-    tr = {"SA":"TCP_SYNACK"}
-    def __str__(self):
-        return "TCP_SYN"
+    tr = [(lambda x: (x.find("S") >= 0) and (x.find("A") >= 0) , "TCP_SYNACK")]
 
 class TCP_SYNACK(TCP_STATE):
-    tr = {"A":"TCP_ESTABLISHED"}
-    def __str__(self):
-        return "TCP_SYNACK"
+    tr = [(lambda x: x.find("A") >= 0, "TCP_ESTABLISHED")]
 
 class TCP_ESTABLISHED(TCP_STATE):
+    tr = []
     pass
-    def __str__(self):
-        return "TCP_ESTABLISHED"
 
 class Flow:
     """
@@ -129,7 +127,7 @@ class Flow:
         flags = pkt.sprintf("%TCP.flags%")
         log.debug("FLAGS: %s" % (flags))
         self.state = self.state.update(flags)
-        log.debug("Updating TCP connection state  to %s" % (self.state))
+        log.debug("Updating TCP connection state to %s" % (self.state))
 
     def update_status(self, pkt):
         """Updates the status of a flow.
