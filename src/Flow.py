@@ -22,9 +22,21 @@
 
 from scapy.all import *
 log = logging.getLogger()
+FLOW_TIMEOUT = 600 # Flow timeout in seconds
 
+
+################################################################################
+# TCP connection states. These define the finite state machine used for        #
+# verifying TCP flow validity.                                                 #
+################################################################################
 class TCP_STATE(object):
+    ''' Superclass for a TCP connection state machine.  
+    
+    Defines the behaviour of a state within a generalized finite state machine.
+    
+    '''
     def update(self, input):
+        # Retrieve all states for which the in put satisfies
         next_state = [ s for f, s in self.tr if f(input)  ]
         try:
             return eval(next_state[0])()
@@ -46,16 +58,21 @@ class TCP_SYNACK(TCP_STATE):
 
 class TCP_ESTABLISHED(TCP_STATE):
     tr = []
-    pass
+
+################################################################################
 
 class Flow:
-    """
-    classdocs
-    """
+    ''' Represents one flow.
+    
+    An object of this class represents one flow. The Flow object contains 
+    several statistics about the flow as well as stores the first packet of the
+    flow for reference. 
+    
+    '''
     def __init__(self, pkt, id):
-        """
+        '''
         Constructor
-        """
+        '''
         # Set initial values
         self.id = id
         self.first_packet = pkt
@@ -123,16 +140,32 @@ class Flow:
                         self.total_bpackets, self.total_bvolume]))
 
     def update_tcp_state(self, pkt):
-        # Update the TCP connection state
+        ''' Updates the TCP connection state
+        
+        Checks to see if a valid TCP connection has been made. The function uses
+        a finite state machine implemented through the TCP_STATE class and its 
+        sub-classes.
+        
+        '''
         flags = pkt.sprintf("%TCP.flags%")
         log.debug("FLAGS: %s" % (flags))
         self.state = self.state.update(flags)
         log.debug("Updating TCP connection state to %s" % (self.state))
 
     def update_status(self, pkt):
-        """Updates the status of a flow.
+        ''' Updates the status of a flow
         
-        """
+        Updates the status of a flow, checking if the flow is a valid flow. 
+        
+        In the case of UDP, this is a simple check upon whether at least one 
+        packet has been sent in each direction.
+        
+        In the case of TCP, the validity check is a little more complex. A valid
+        TCP flow requires that a TCP connection is established in the usual way.
+        Furthermore, the TCP flow is terminated when a TCP connection is closed,
+        or upon a timeout defined by FLOW_TIMEOUT.
+        
+        '''
         # Skip if the 
         if pkt.proto == 19:
             # UDP
@@ -150,13 +183,13 @@ class Flow:
             self.update_tcp_state(pkt)
 
     def add_to_flow(self, pkt):
-        """Adds a packet to the current flow. 
+        ''' Add a packet to the current flow. 
         
-        This function adds the provided packet to the flow.  
+        This function adds the packet, provided as an argument, to the flow.  
         
         Args:
             pkt: The packet to be added
-        """
+        '''
         length = pkt.len
         if (pkt[IP].src == self.first_packet[IP].src):
             # Packet is traveling in the forward direction

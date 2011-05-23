@@ -36,15 +36,15 @@ log.addHandler(ch)
 
 
 def sort_by_IP(t):
-    """
+    '''
     Re-arrange a flow tuple to have lowest IP first, for lookup
-    """
+    '''
     return (t[2], t[3], t[0], t[1], t[4]) if t[2] < t[0] else t
 
 class Flowtbag:
-    """
+    '''
     classdocs
-    """
+    '''
     def __init__(self, filename="test.cap"):
         try:
             self.count = 0
@@ -61,13 +61,13 @@ class Flowtbag:
         return "I am a flowtbag of size %s" % (len(self.active_flows))
 
     def callback(self, pkt):
-        """The callback function to be used to process each packet
+        ''' The callback function to be used to process each packet
         
-        This is the function applied to each individual packet in the capture. 
+        This function is applied to each individual packet in the capture. 
         
         Args:
             pkt: The packet to be processed
-        """
+        '''
         self.count += 1
         if IP not in pkt or pkt.proto not in (6, 19):
             # Ignore non-IP packets or packets that aren't TCP or UDP
@@ -81,12 +81,15 @@ class Flowtbag:
         proto = pkt.proto
         flow_tuple = (srcip, srcport, dstip, dstport, proto)
         flow_tuple = sort_by_IP(flow_tuple)
+        # Find if a flow already exists for this tuple
         if flow_tuple not in self.active_flows:
+            # The a flow of this tuple does not exists yet, create it.
             self.flow_count += 1
             flow = Flow(pkt, self.flow_count)
             self.active_flows[flow_tuple] = flow
             log.debug("Created flow %s" % (flow))
         else:
+            # A flow of this tuple already exists, add to it.
             flow = self.active_flows[flow_tuple]
             log.debug("Adding packet %d to flow %s" % \
                 (self.count, repr(flow)))
