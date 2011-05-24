@@ -24,11 +24,10 @@ from scapy.all import *
 log = logging.getLogger()
 FLOW_TIMEOUT = 600 # Flow timeout in seconds
 
-
-################################################################################
+#===============================================================================
 # TCP connection states. These define the finite state machine used for        #
 # verifying TCP flow validity.                                                 #
-################################################################################
+#===============================================================================
 class TCP_STATE(object):
     ''' Superclass for a TCP connection state machine.  
     
@@ -36,13 +35,12 @@ class TCP_STATE(object):
     
     '''
     def update(self, input):
-        # Retrieve all states for which the in put satisfies
-        next_state = [ s for f, s in self.tr if f(input)  ]
+        # Add all states satisfied by the function in the map /tr/ given /input/
+        next_state = [ s for f, s in self.tr if f(input)]
         try:
             return eval(next_state[0])()
         except:
-            # Default to no transition
-            return self
+            return self # Default to no transition
 
     def __str__(self):
         return self.__class__.__name__
@@ -51,15 +49,26 @@ class TCP_START(TCP_STATE):
     tr = [(lambda x: x.find("S") >= 0, "TCP_SYN")]
 
 class TCP_SYN(TCP_STATE):
-    tr = [(lambda x: (x.find("S") >= 0) and (x.find("A") >= 0) , "TCP_SYNACK")]
+    tr = [(lambda x: x.find("S") >= 0 and
+                     x.find("A") >= 0, "TCP_SYNACK")]
 
 class TCP_SYNACK(TCP_STATE):
     tr = [(lambda x: x.find("A") >= 0, "TCP_ESTABLISHED")]
 
 class TCP_ESTABLISHED(TCP_STATE):
+    tr = [(lambda x: x.find("F") >= 0, "TCP_PASSIVE_CLOSE_WAIT")]
+
+class TCP_PASSIVE_CLOSE_WAIT(TCP_STATE):
+    tr = [(lambda x: x.find("F") >= 0 and
+                     x.find("A") >= 0, "TCP_PASSIVE_CLOSE_LASTACK")]
+
+class TCP_PASSIVE_CLOSE_LASTACK(TCP_STATE):
+    tr = [(lambda x: x.find("A") >= 0, "TCP_CLOSED")]
+
+class TCP_CLOSED(TCP_STATE):
     tr = []
 
-################################################################################
+#------------------------------------------------------------------------------ 
 
 class Flow:
     ''' Represents one flow.
@@ -77,6 +86,7 @@ class Flow:
         self.id = id
         self.first_packet = pkt
         self.valid = False
+        self.dir = "f"
         if pkt.proto == 6:
             self.state = TCP_START()
         # Set the initial status of the flow
@@ -128,7 +138,6 @@ class Flow:
         #self.total_fhlen
         #self.total_bhlen
 
-
     def __repr__(self):
         return "[%d:(%s,%d,%s,%d,%d)]" % \
             (self.id, self.srcip, self.srcport, self.dstip, self.dstport, self.proto)
@@ -145,7 +154,7 @@ class Flow:
         Checks to see if a valid TCP connection has been made. The function uses
         a finite state machine implemented through the TCP_STATE class and its 
         sub-classes.
-        
+
         '''
         flags = pkt.sprintf("%TCP.flags%")
         log.debug("FLAGS: %s" % (flags))
@@ -192,11 +201,15 @@ class Flow:
         '''
         length = pkt.len
         if (pkt[IP].src == self.first_packet[IP].src):
-            # Packet is traveling in the forward direction
+            self.dir = "f"
+        else:
+            self.dir = "b"
+        if self.dir == "f":
+            # Packet is travelling in the forward direction
             self.total_fpackets += 1
             self.total_fvolume += length
         else:
-            # Packet is traveling in the backward direction
+            # Packet is travelling in the backward direction
             self.total_bpackets += 1
             self.total_bvolume += length
         self.update_status(pkt)

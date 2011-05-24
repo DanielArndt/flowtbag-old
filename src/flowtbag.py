@@ -21,7 +21,6 @@
 '''
 
 from scapy.all import *
-import logging
 from Flow import Flow
 
 #Set up logging system.
