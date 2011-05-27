@@ -24,6 +24,7 @@ from scapy.all import *
 log = logging.getLogger()
 FLOW_TIMEOUT = 600 # Flow timeout in seconds
 
+
 #===============================================================================
 # TCP connection states. These define the finite state machine used for        #
 # verifying TCP flow validity.                                                 #
@@ -34,9 +35,13 @@ class TCP_STATE(object):
     Defines the behaviour of a state within a generalized finite state machine.
     
     '''
-    def update(self, input):
-        # Add all states satisfied by the function in the map /tr/ given /input/
-        next_state = [ s for f, s in self.tr if f(input)]
+    def update(self, flags, dir, pdir):
+        if flags.find("R") >= 0:
+            return TCP_CLOSED()
+        if flags.find("F") >= 0 and dir == pdir:
+            return TCP_FIN()
+        # Add all states satisfied by the function in the map /tr/ given /flags/
+        next_state = [ s for f, s in self.tr if f(flags, dir, pdir)]
         try:
             return eval(next_state[0])()
         except:
@@ -46,24 +51,20 @@ class TCP_STATE(object):
         return self.__class__.__name__
 
 class TCP_START(TCP_STATE):
-    tr = [(lambda x: x.find("S") >= 0, "TCP_SYN")]
+    tr = [(lambda f, dir, pdir: f.find("S") >= 0 and dir == pdir, "TCP_SYN")]
 
 class TCP_SYN(TCP_STATE):
-    tr = [(lambda x: x.find("S") >= 0 and
-                     x.find("A") >= 0, "TCP_SYNACK")]
+    tr = [(lambda f, dir, pdir: f.find("S") >= 0 and
+           f.find("A") >= 0 and dir != pdir, "TCP_SYNACK")]
 
 class TCP_SYNACK(TCP_STATE):
-    tr = [(lambda x: x.find("A") >= 0, "TCP_ESTABLISHED")]
+    tr = [(lambda f, dir, pdir: f.find("A") >= 0  and dir == pdir, "TCP_ESTABLISHED")]
 
 class TCP_ESTABLISHED(TCP_STATE):
-    tr = [(lambda x: x.find("F") >= 0, "TCP_PASSIVE_CLOSE_WAIT")]
+    tr = []
 
-class TCP_PASSIVE_CLOSE_WAIT(TCP_STATE):
-    tr = [(lambda x: x.find("F") >= 0 and
-                     x.find("A") >= 0, "TCP_PASSIVE_CLOSE_LASTACK")]
-
-class TCP_PASSIVE_CLOSE_LASTACK(TCP_STATE):
-    tr = [(lambda x: x.find("A") >= 0, "TCP_CLOSED")]
+class TCP_FIN(TCP_STATE):
+    tr = [(lambda f, dir, pdir: f.find("A") >= 0 and dir != pdir, "TCP_CLOSED")]
 
 class TCP_CLOSED(TCP_STATE):
     tr = []
@@ -71,11 +72,11 @@ class TCP_CLOSED(TCP_STATE):
 #------------------------------------------------------------------------------ 
 
 class Flow:
-    ''' Represents one flow.
+    ''' Represents one flow to be represented in a flowtbag.
     
-    An object of this class represents one flow. The Flow object contains 
-    several statistics about the flow as well as stores the first packet of the
-    flow for reference. 
+    An object of this class represents one flow in a flowtbag. The Flow object 
+    contains several statistics about the flow as well as stores the first 
+    packet of the flow for reference. 
     
     '''
     def __init__(self, pkt, id):
@@ -86,9 +87,10 @@ class Flow:
         self.id = id
         self.first_packet = pkt
         self.valid = False
-        self.dir = "f"
+        self.pdir = "f"
         if pkt.proto == 6:
-            self.state = TCP_START()
+            self.cstate = TCP_START() # Client state
+            self.sstate = TCP_START() # Server state
         # Set the initial status of the flow
         self.update_status(pkt)
         # Basic flow identification criteria
@@ -158,8 +160,12 @@ class Flow:
         '''
         flags = pkt.sprintf("%TCP.flags%")
         log.debug("FLAGS: %s" % (flags))
-        self.state = self.state.update(flags)
-        log.debug("Updating TCP connection state to %s" % (self.state))
+        # Update client state
+        self.cstate = self.cstate.update(flags, "f", self.pdir)
+        log.debug("Updating TCP connection cstate to %s" % (self.cstate))
+        # Update server state
+        self.sstate = self.sstate.update(flags, "b", self.pdir)
+        log.debug("Updating TCP connection sstate to %s" % (self.sstate))
 
     def update_status(self, pkt):
         ''' Updates the status of a flow
@@ -201,10 +207,10 @@ class Flow:
         '''
         length = pkt.len
         if (pkt[IP].src == self.first_packet[IP].src):
-            self.dir = "f"
+            self.pdir = "f"
         else:
-            self.dir = "b"
-        if self.dir == "f":
+            self.pdir = "b"
+        if self.pdir == "f":
             # Packet is travelling in the forward direction
             self.total_fpackets += 1
             self.total_fvolume += length
