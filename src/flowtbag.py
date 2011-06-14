@@ -60,9 +60,10 @@ class Flowtbag:
         return "I am a flowtbag of size %s" % (len(self.active_flows))
 
     def callback(self, pkt):
-        ''' The callback function to be used to process each packet
+        '''
+        The callback function to be used to process each packet
         
-        This function is applied to each individual packet in the capture. 
+        This function is applied to each individual packet in the capture.
         
         Args:
             pkt: The packet to be processed

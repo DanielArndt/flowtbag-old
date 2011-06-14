@@ -30,7 +30,8 @@ FLOW_TIMEOUT = 600 # Flow timeout in seconds
 # verifying TCP flow validity.                                                 #
 #===============================================================================
 class TCP_STATE(object):
-    ''' Superclass for a TCP connection state machine.  
+    ''' 
+    Superclass for a TCP connection state machine.  
     
     Defines the behaviour of a state within a generalized finite state machine.
     
@@ -72,7 +73,8 @@ class TCP_CLOSED(TCP_STATE):
 #------------------------------------------------------------------------------ 
 
 class Flow:
-    ''' Represents one flow to be represented in a flowtbag.
+    '''
+    Represents one flow to be stored in a flowtbag.
     
     An object of this class represents one flow in a flowtbag. The Flow object 
     contains several statistics about the flow as well as stores the first 
@@ -80,8 +82,7 @@ class Flow:
     
     '''
     def __init__(self, pkt, id):
-        '''
-        Constructor
+        ''' Constructor. Initialize all values.
         '''
         # Set initial values
         self.id = id
@@ -151,7 +152,8 @@ class Flow:
                         self.total_bpackets, self.total_bvolume]))
 
     def update_tcp_state(self, pkt):
-        ''' Updates the TCP connection state
+        '''
+        Updates the TCP connection state
         
         Checks to see if a valid TCP connection has been made. The function uses
         a finite state machine implemented through the TCP_STATE class and its 
@@ -168,11 +170,12 @@ class Flow:
         log.debug("Updating TCP connection sstate to %s" % (self.sstate))
 
     def update_status(self, pkt):
-        ''' Updates the status of a flow
+        '''
+        Updates the status of a flow (valid/invalid)
         
-        Updates the status of a flow, checking if the flow is a valid flow. 
+        Updates the status of a flow, checking if the flow is a valid flow.
         
-        In the case of UDP, this is a simple check upon whether at least one 
+        In the case of UDP, this is a simple check upon whether at least one
         packet has been sent in each direction.
         
         In the case of TCP, the validity check is a little more complex. A valid
@@ -181,7 +184,6 @@ class Flow:
         or upon a timeout defined by FLOW_TIMEOUT.
         
         '''
-        # Skip if the 
         if pkt.proto == 19:
             # UDP
             # Skip if already labelled valid
@@ -198,9 +200,10 @@ class Flow:
             self.update_tcp_state(pkt)
 
     def add_to_flow(self, pkt):
-        ''' Add a packet to the current flow. 
+        '''
+        Add a packet to the current flow.
         
-        This function adds the packet, provided as an argument, to the flow.  
+        This function adds the packet, provided as an argument, to the flow.
         
         Args:
             pkt: The packet to be added
