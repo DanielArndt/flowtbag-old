@@ -93,7 +93,7 @@ class Flowtbag:
             flow = self.active_flows[flow_tuple]
             log.debug("Adding packet %d to flow %s" % \
                 (self.count, repr(flow)))
-            flow.add_to_flow(pkt)
+            flow.add(pkt)
             log.debug("At: %s" % (flow))
 
 if __name__ == '__main__':

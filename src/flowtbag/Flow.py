@@ -21,6 +21,7 @@
 '''
 
 from scapy.all import *
+from compiler.ast import While
 log = logging.getLogger()
 FLOW_TIMEOUT = 600 # Flow timeout in seconds
 
@@ -33,9 +34,10 @@ class TCP_STATE(object):
     ''' 
     Superclass for a TCP connection state machine.  
     
-    Defines the behaviour of a state within a generalized finite state machine.
-    
+    Defines the behavior of a state within a generalized finite state machine.
+    Currently, the rules perfectly resemble those used by NetMate
     '''
+    #TODO: Update the state machine to include more robust checks.
     def update(self, flags, dir, pdir):
         if flags.find("R") >= 0:
             return TCP_CLOSED()
@@ -82,13 +84,17 @@ class Flow:
     
     '''
     def __init__(self, pkt, id):
-        ''' Constructor. Initialize all values.
+        '''
+        Constructor. Initialize all values.
         '''
         # Set initial values
         self.id = id
         self.first_packet = pkt
         self.valid = False
         self.pdir = "f"
+        self.first = pkt.time
+        self.flast = 0
+        self.blast = 0
         if pkt.proto == 6:
             self.cstate = TCP_START() # Client state
             self.sstate = TCP_START() # Server state
@@ -199,7 +205,15 @@ class Flow:
                 pass
             self.update_tcp_state(pkt)
 
-    def add_to_flow(self, pkt):
+    def get_last(self):
+        if (self.blast == 0):
+            return self.flast
+        elif (self.flast == 0):
+            return self.blast
+        else:
+            return self.flast if (self.flast > self.blast) else self.blast
+
+    def add(self, pkt):
         '''
         Add a packet to the current flow.
         
@@ -208,7 +222,21 @@ class Flow:
         Args:
             pkt: The packet to be added
         '''
-        length = pkt.len
+        len = pkt.len
+        now = pkt.time
+        assert (now >= self.first)
+
+        # Ignore re-ordered packets
+        if (now < self.get_last()):
+            log.debug("Flow: ignoring reordered packet. %d < %d" %
+                      (now, self.get_last))
+            raise NotImplementedError
+
+        #Check validity
+        self.update_status(pkt)
+
+        #log.debug("Options: %d" % (pkt[IP].options[0]))
+        log.debug(pkt.time)
         if (pkt[IP].src == self.first_packet[IP].src):
             self.pdir = "f"
         else:
@@ -216,9 +244,12 @@ class Flow:
         if self.pdir == "f":
             # Packet is travelling in the forward direction
             self.total_fpackets += 1
-            self.total_fvolume += length
+            self.total_fvolume += len
         else:
             # Packet is travelling in the backward direction
             self.total_bpackets += 1
-            self.total_bvolume += length
-        self.update_status(pkt)
+            self.total_bvolume += len
+
+        #TODO: Fix this so that it does something.
+        self.flast = now
+        self.blast = now
