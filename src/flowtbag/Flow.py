@@ -209,7 +209,10 @@ class Flow:
     def get_last(self):
         '''
         Reimplementation of the NetMate flowstats method 
-        getLast(struct flowData_t). Returns the timestamp of the last packet.
+        getLast(struct flowData_t). 
+        
+        Returns:
+            The timestamp of the last packet.
         '''
         if (self.blast == 0):
             return self.flast
@@ -217,6 +220,16 @@ class Flow:
             return self.blast
         else:
             return self.flast if (self.flast > self.blast) else self.blast
+
+    def get_proto_hlen(self, pkt):
+        '''
+        Returns:
+            The protocol header length 
+        '''
+        if (pkt.proto == 19):
+            return 8
+        elif (pkt.proto == 6):
+            return pkt[TCP].dataofs * 32 / 8 # TCPHL * 32 bit word / 8 bits per byte
 
     def add(self, pkt):
         '''
@@ -229,6 +242,8 @@ class Flow:
         '''
         len = pkt.len
         iphlen = pkt.ihl * 32 / 8 # ihl field * 32-bits / 8 bits in a byte
+        protohlen = self.get_proto_hlen(pkt)
+        log.debug("protoHLEN: %d" % (protohlen))
         now = pkt.time
         assert (now >= self.first)
 
@@ -241,21 +256,24 @@ class Flow:
         #Check validity
         self.update_status(pkt)
 
-        #log.debug("Options: %d" % (pkt[IP].options[0]))
-        log.debug(pkt.time)
         if (pkt[IP].src == self.first_packet[IP].src):
             self.pdir = "f"
         else:
             self.pdir = "b"
+
         if self.pdir == "f":
             # Packet is travelling in the forward direction
+            # Calculate some statistics
             self.total_fpackets += 1
             self.total_fvolume += len
-            self.total_fhlen += iphlen
+            self.total_fhlen += iphlen + protohlen
+            # Update the last forward packet timestamp
             self.flast = now
         else:
             # Packet is travelling in the backward direction
+            # Calculate some statistics
             self.total_bpackets += 1
             self.total_bvolume += len
-            self.total_bhlen += iphlen
+            self.total_bhlen += iphlen + protohlen
+            # Update the last backward packet timestamp
             self.blast = now
