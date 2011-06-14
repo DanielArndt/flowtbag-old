@@ -28,7 +28,7 @@ log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
-formatter = logging.Formatter("%(asctime)s;%(levelname)s:%(message)s",
+formatter = logging.Formatter("%(asctime)s;%(levelname)s:%(message)s - %(filename)s:%(lineno)s",
                               "%H:%M:%S")
 ch.setFormatter(formatter)
 log.addHandler(ch)
@@ -57,7 +57,7 @@ class Flowtbag:
         raise NotImplementedError()
 
     def __str__(self):
-        return "I am a flowtbag of size %s" % (len(self.active_flows))
+        return "I am a Flowtbag of size %s" % (len(self.active_flows))
 
     def callback(self, pkt):
         '''

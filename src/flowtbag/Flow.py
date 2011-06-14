@@ -144,8 +144,8 @@ class Flow:
         #self.bpsh_cnt
         #self.furg_cnt
         #self.burg_cnt
-        #self.total_fhlen
-        #self.total_bhlen
+        self.total_fhlen = 0
+        self.total_bhlen = 0
 
     def __repr__(self):
         return "[%d:(%s,%d,%s,%d,%d)]" % \
@@ -196,7 +196,8 @@ class Flow:
             if self.valid: return
             # Check if a packet has been received from backward direction. One
             # packet has already been sent in forward direction to initiate.
-            if self.total_bpackets > 0:
+            if pkt.len > 8:
+                # TODO: Check for 1 packet in each direction
                 self.valid = True
         elif pkt.proto == 6:
             # TCP
@@ -206,6 +207,10 @@ class Flow:
             self.update_tcp_state(pkt)
 
     def get_last(self):
+        '''
+        Reimplementation of the NetMate flowstats method 
+        getLast(struct flowData_t). Returns the timestamp of the last packet.
+        '''
         if (self.blast == 0):
             return self.flast
         elif (self.flast == 0):
@@ -223,6 +228,7 @@ class Flow:
             pkt: The packet to be added
         '''
         len = pkt.len
+        iphlen = pkt.ihl * 32 / 8 # ihl field * 32-bits / 8 bits in a byte
         now = pkt.time
         assert (now >= self.first)
 
@@ -245,11 +251,11 @@ class Flow:
             # Packet is travelling in the forward direction
             self.total_fpackets += 1
             self.total_fvolume += len
+            self.total_fhlen += iphlen
+            self.flast = now
         else:
             # Packet is travelling in the backward direction
             self.total_bpackets += 1
             self.total_bvolume += len
-
-        #TODO: Fix this so that it does something.
-        self.flast = now
-        self.blast = now
+            self.total_bhlen += iphlen
+            self.blast = now
