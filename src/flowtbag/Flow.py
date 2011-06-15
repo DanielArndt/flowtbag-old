@@ -241,9 +241,11 @@ class Flow:
             pkt: The packet to be added
         '''
         len = pkt.len
-        iphlen = pkt.ihl * 32 / 8 # ihl field * 32-bits / 8 bits in a byte
+        iphlen = pkt[IP].ihl * 32 / 8 # ihl field * 32-bits / 8 bits in a byte
+        dscp = pkt[IP].tos >> 2 # Bit shift twice to the right to get DSCP only
+                                # TODO: verify this is working correctly.
         protohlen = self.get_proto_hlen(pkt)
-        log.debug("protoHLEN: %d" % (protohlen))
+        log.debug("dscp: %s" % (dscp))
         now = pkt.time
         assert (now >= self.first)
 
