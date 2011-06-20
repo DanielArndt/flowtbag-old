@@ -21,15 +21,31 @@
 '''
 
 from scapy.all import *
-from compiler.ast import While
+# Retrieve the default logger, should have been initialized by the Flowtbag.
 log = logging.getLogger()
-FLOW_TIMEOUT = 600 # Flow timeout in seconds
 
+#---------------------------------------------------------------------- Settings
+FLOW_TIMEOUT = 600 # Flow timeout in seconds 
+IDLE_THRESHOLD = 1.0
+#----------------------------------------------------------------- End: Settings
 
-#===============================================================================
+def tcp_set(flags, find):
+    '''
+    Checks if a flag is set or not.
+    
+    Args:
+        flags - The string encoded set of flags
+        find - The flag to find
+    Returns:
+        True - if the /find/ flag is set
+        False - otherwise
+    '''
+    return True if flags.find(find) >= 0 else False
+
+#==============================================================================#
 # TCP connection states. These define the finite state machine used for        #
 # verifying TCP flow validity.                                                 #
-#===============================================================================
+#==============================================================================#
 class TCP_STATE(object):
     ''' 
     Superclass for a TCP connection state machine.  
@@ -38,13 +54,22 @@ class TCP_STATE(object):
     Currently, the rules perfectly resemble those used by NetMate
     '''
     #TODO: Update the state machine to include more robust checks.
-    def update(self, flags, dir, pdir):
-        if flags.find("R") >= 0:
+    def update(self, flags, dir, _pdir):
+        '''
+        Updates the TCP state machine.
+        
+        First the RST and FIN flags are checked. If either of these are set, the
+        connection state is set to either TCP_CLOSED or TCP_FIN respectively.
+        Next, the function attempts to find a transition in the map called /tr/.
+        If no transition is found, then the function returns itself. 
+        
+        '''
+        if tcp_set(flags, "R"):
             return TCP_CLOSED()
-        if flags.find("F") >= 0 and dir == pdir:
+        if tcp_set(flags, "F") and dir == _pdir:
             return TCP_FIN()
         # Add all states satisfied by the function in the map /tr/ given /flags/
-        next_state = [ s for f, s in self.tr if f(flags, dir, pdir)]
+        next_state = [ s for f, s in self.tr if f(flags, dir, _pdir)]
         try:
             return eval(next_state[0])()
         except:
@@ -54,25 +79,31 @@ class TCP_STATE(object):
         return self.__class__.__name__
 
 class TCP_START(TCP_STATE):
-    tr = [(lambda f, dir, pdir: f.find("S") >= 0 and dir == pdir, "TCP_SYN")]
+    tr = [(lambda flags, dir, pdir: tcp_set(flags, "S") and dir == pdir, "TCP_SYN")]
 
 class TCP_SYN(TCP_STATE):
-    tr = [(lambda f, dir, pdir: f.find("S") >= 0 and
-           f.find("A") >= 0 and dir != pdir, "TCP_SYNACK")]
+    tr = [(lambda flags, dir, pdir: tcp_set(flags, "S") and
+           tcp_set(flags, "A") and dir != pdir, "TCP_SYNACK")]
 
 class TCP_SYNACK(TCP_STATE):
-    tr = [(lambda f, dir, pdir: f.find("A") >= 0  and dir == pdir, "TCP_ESTABLISHED")]
+    tr = [(lambda flags, dir, pdir: tcp_set(flags, "A") and
+           dir == pdir, "TCP_ESTABLISHED")]
 
 class TCP_ESTABLISHED(TCP_STATE):
     tr = []
 
 class TCP_FIN(TCP_STATE):
-    tr = [(lambda f, dir, pdir: f.find("A") >= 0 and dir != pdir, "TCP_CLOSED")]
+    tr = [(lambda flags, dir, pdir: tcp_set(flags, "A") and
+           dir != pdir, "TCP_CLOSED")]
 
 class TCP_CLOSED(TCP_STATE):
     tr = []
 
-#------------------------------------------------------------------------------ 
+#-------------------------------------------------------- End: TCP state machine
+
+#==============================================================================#
+# Begin code for Flow class                                                    #
+#==============================================================================#
 
 class Flow:
     '''
@@ -91,15 +122,10 @@ class Flow:
         self.id = id
         self.first_packet = pkt
         self.valid = False
-        self.pdir = "f"
+        self._pdir = "f"
         self.first = pkt.time
         self.flast = 0
         self.blast = 0
-        if pkt.proto == 6:
-            self.cstate = TCP_START() # Client state
-            self.sstate = TCP_START() # Server state
-        # Set the initial status of the flow
-        self.update_status(pkt)
         # Basic flow identification criteria
         self.srcip = pkt[IP].src
         self.srcport = pkt.sport
@@ -140,12 +166,26 @@ class Flow:
         #self.sflow_fbytes
         #self.sflow_bpackets
         #self.sflow_bbytes
-        #self.fpsh_cnt
-        #self.bpsh_cnt
-        #self.furg_cnt
-        #self.burg_cnt
+        if pkt.proto == 6:
+            # TCP specific
+            # Create state machines for the client and server 
+            self.cstate = TCP_START() # Client state
+            self.sstate = TCP_START() # Server state
+            # Set TCP flag stats
+            flags = pkt.sprintf("%TCP.flags%")
+            if (tcp_set(flags, "P")):
+                self.fpsh_cnt = 1
+            else:
+                self.fpsh_cnt = 0
+            self.bpsh_cnt = 0
+            if (tcp_set(flags, "U")):
+                self.furg_cnt = 1
+            else:
+                self.furg_cnt = 0
+            self.burg_cnt = 0
         self.total_fhlen = 0
         self.total_bhlen = 0
+        self.update_status(pkt)
 
     def __repr__(self):
         return "[%d:(%s,%d,%s,%d,%d)]" % \
@@ -164,21 +204,22 @@ class Flow:
         Checks to see if a valid TCP connection has been made. The function uses
         a finite state machine implemented through the TCP_STATE class and its 
         sub-classes.
-
+        
+        Args:
+            pkt - the packet to be analyzed to update the TCP connection state
+                  for the flow.
         '''
         flags = pkt.sprintf("%TCP.flags%")
         log.debug("FLAGS: %s" % (flags))
         # Update client state
-        self.cstate = self.cstate.update(flags, "f", self.pdir)
+        self.cstate = self.cstate.update(flags, "f", self._pdir)
         log.debug("Updating TCP connection cstate to %s" % (self.cstate))
         # Update server state
-        self.sstate = self.sstate.update(flags, "b", self.pdir)
+        self.sstate = self.sstate.update(flags, "b", self._pdir)
         log.debug("Updating TCP connection sstate to %s" % (self.sstate))
 
     def update_status(self, pkt):
         '''
-        Updates the status of a flow (valid/invalid)
-        
         Updates the status of a flow, checking if the flow is a valid flow.
         
         In the case of UDP, this is a simple check upon whether at least one
@@ -189,6 +230,8 @@ class Flow:
         Furthermore, the TCP flow is terminated when a TCP connection is closed,
         or upon a timeout defined by FLOW_TIMEOUT.
         
+        Args:
+            pkt - the packet to be analyzed for updating the status of the flow.
         '''
         if pkt.proto == 19:
             # UDP
@@ -201,13 +244,24 @@ class Flow:
                 self.valid = True
         elif pkt.proto == 6:
             # TCP
+            if isinstance(self.cstate, TCP_ESTABLISHED):
+                hlen, _, _ = self.get_header_lengths(pkt)
+                if pkt.len > hlen:
+                    #TODO: Why would we need a hasdata variable such as in NM?
+                    self.valid = True
             if not self.valid:
                 #Check validity
                 pass
             self.update_tcp_state(pkt)
+        else:
+            raise NotImplementedError
 
-    def get_last(self):
+    def get_last_time(self):
         '''
+        Returns the time stamp of the most recent packet in the flow, be it the
+        last packet in the forward direction, or the last packet in the backward
+        direction.
+        
         Reimplementation of the NetMate flowstats method 
         getLast(struct flowData_t). 
         
@@ -221,15 +275,29 @@ class Flow:
         else:
             return self.flast if (self.flast > self.blast) else self.blast
 
-    def get_proto_hlen(self, pkt):
+    def get_header_lengths(self, pkt):
         '''
+        Returns the total header length, as well as the protocol specific header
+        and internet protocol header lengths.
+        
+        Args:
+            pkt - The packet for which the header lengths are to be retrieved.
+        
         Returns:
-            The protocol header length 
+            hlen - The total header length.
+            protohlen - The protocol specific (TCP or UDP) header length.
+            iphlen - The length of the internet protocol header. 
         '''
+        # iphlen - Length of the IP header
+        iphlen = pkt[IP].ihl * 32 / 8 # ihl field * 32-bits / 8 bits in a byte
+        # protohlen - Length of the protocol specific header.
         if (pkt.proto == 19):
-            return 8
+            protohlen = 8
         elif (pkt.proto == 6):
-            return pkt[TCP].dataofs * 32 / 8 # TCPHL * 32 bit word / 8 bits per byte
+            protohlen = pkt[TCP].dataofs * 32 / 8 # TCPHL * 32 bit word / 8 bits per byte
+        # hlen - Total header length
+        hlen = iphlen + protohlen
+        return hlen, protohlen, iphlen
 
     def add(self, pkt):
         '''
@@ -241,41 +309,63 @@ class Flow:
             pkt: The packet to be added
         '''
         len = pkt.len
-        iphlen = pkt[IP].ihl * 32 / 8 # ihl field * 32-bits / 8 bits in a byte
+        # iphlen - Length of the IP header
+        hlen, _, _ = self.get_header_lengths(pkt)
         dscp = pkt[IP].tos >> 2 # Bit shift twice to the right to get DSCP only
                                 # TODO: verify this is working correctly.
-        protohlen = self.get_proto_hlen(pkt)
         log.debug("dscp: %s" % (dscp))
         now = pkt.time
         assert (now >= self.first)
 
         # Ignore re-ordered packets
-        if (now < self.get_last()):
+        if (now < self.get_last_time()):
             log.debug("Flow: ignoring reordered packet. %d < %d" %
                       (now, self.get_last))
             raise NotImplementedError
 
-        #Check validity
+        # Update the global variable _pdir which holds the direction of the
+        # packet currently in question.  
+        if (pkt[IP].src == self.first_packet[IP].src):
+            self._pdir = "f"
+        else:
+            self._pdir = "b"
+
+        # Update the status (validity, TCP connection state) of the flow.
         self.update_status(pkt)
 
-        if (pkt[IP].src == self.first_packet[IP].src):
-            self.pdir = "f"
-        else:
-            self.pdir = "b"
+        # Set attributes.
 
-        if self.pdir == "f":
+
+        # Set bi-directional attributes.
+        if self._pdir == "f":
             # Packet is travelling in the forward direction
             # Calculate some statistics
             self.total_fpackets += 1
             self.total_fvolume += len
-            self.total_fhlen += iphlen + protohlen
-            # Update the last forward packet timestamp
+            self.total_fhlen += hlen
+            if pkt.proto == 6:
+                # Packet is using TCP protocol
+                flags = pkt.sprintf("%TCP.flags%")
+                if (tcp_set(flags, "P")):
+                    self.fpsh_cnt += 1
+                if (tcp_set(flags, "U")):
+                    self.furg_cnt += 1
+            # Update the last forward packet time stamp
             self.flast = now
         else:
             # Packet is travelling in the backward direction
             # Calculate some statistics
             self.total_bpackets += 1
             self.total_bvolume += len
-            self.total_bhlen += iphlen + protohlen
-            # Update the last backward packet timestamp
+            self.total_bhlen += hlen
+            if pkt.proto == 6:
+                # Packet is using TCP protocol
+                flags = pkt.sprintf("%TCP.flags%")
+                if (tcp_set(flags, "P")):
+                    self.bpsh_cnt += 1
+                if (tcp_set(flags, "U")):
+                    self.burg_cnt += 1
+            # Update the last backward packet time stamp
             self.blast = now
+
+#--------------------------------------------------------------------- End: Flow
