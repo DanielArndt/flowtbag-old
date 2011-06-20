@@ -332,7 +332,6 @@ class Flow:
 
         # Update the status (validity, TCP connection state) of the flow.
         self.update_status(pkt)
-
         # Set attributes.
 
 
