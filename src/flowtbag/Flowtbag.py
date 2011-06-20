@@ -23,7 +23,7 @@
 from scapy.all import *
 from Flow import Flow
 
-#Set up logging system.
+#Set up default logging system.
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
