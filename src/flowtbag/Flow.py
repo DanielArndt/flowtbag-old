@@ -111,7 +111,19 @@ class Flow:
     
     An object of this class represents one flow in a flowtbag. The Flow object 
     contains several statistics about the flow as well as stores the first 
-    packet of the flow for reference. 
+    packet of the flow for reference.
+    
+    Variable naming conventions:
+        Prefix - desc
+        _  - Instance variable used for storing information about the flow which 
+             is important for calculations or identification purposes but is not
+             part of the output.
+            
+        a_ - Instance variables representing an attribute to be exported as a
+             flow attribute (feature).
+             
+        c_ - Counter variables, used for counting totals and other statistics to
+             help in calculating attributes. 
     
     '''
     def __init__(self, pkt, id):
@@ -119,49 +131,50 @@ class Flow:
         Constructor. Initialize all values.
         '''
         # Set initial values
-        self.id = id
-        self.first_packet = pkt
-        self.valid = False
+        self._id = id
+        self._first_packet = pkt
+        self._valid = False
         self._pdir = "f"
-        self.first = pkt.time
-        self.flast = 0
-        self.blast = 0
+        self._first = pkt.time
+        self._flast = 0
+        self._blast = 0
         # Basic flow identification criteria
-        self.srcip = pkt[IP].src
-        self.srcport = pkt.sport
-        self.dstip = pkt[IP].dst
-        self.dstport = pkt.dport
-        self.proto = pkt.proto
+        self.a_srcip = pkt[IP].src
+        self.a_srcport = pkt.sport
+        self.a_dstip = pkt[IP].dst
+        self.a_dstport = pkt.dport
+        self.a_proto = pkt.proto
         #
-        self.total_fpackets = 1
-        self.total_fvolume = pkt.len
-        self.total_bpackets = 0
-        self.total_bvolume = 0
-        #self.min_fpktl
-        #self.mean_fpktl
-        #self.max_fpktl
-        #self.std_fpktl
-        #self.min_bpktl
-        #self.mean_bpktl
-        #self.max_bpktl
-        #self.std_bpktl
-        #self.min_fiat
-        #self.mean_fiat
-        #self.max_fiat
-        #self.std_fiat
-        #self.min_biat
-        #self.mean_biat
-        #self.max_biat
-        #self.std_biat
-        #self.duration
-        #self.min_active
-        #self.mean_active
-        #self.max_active
-        #self.std_active
-        #self.min_idle
-        #self.mean_idle
-        #self.max_idle
-        #self.std_idle
+        self.a_total_fpackets = 1
+        self.a_total_fvolume = pkt.len
+        self.a_total_bpackets = 0
+        self.a_total_bvolume = 0
+        #self.a_min_fpktl
+        #self.a_mean_fpktl
+        #self.a_max_fpktl
+        #self.a_std_fpktl
+        #self.a_min_bpktl
+        #self.a_mean_bpktl
+        #self.a_max_bpktl
+        #self.a_std_bpktl
+        #self.a_min_fiat
+        #self.a_mean_fiat
+        #self.a_max_fiat
+        #self.a_std_fiat
+        #self.a_min_biat
+        #self.a_mean_biat
+        #self.a_max_biat
+        #self.a_std_biat
+        #self.a_duration
+        #self.a_min_active
+        #self.a_mean_active
+        #self.a_max_active
+        #self.a_std_active
+        self.c_idle_total
+        self.a_min_idle = -1
+        self.a_mean_idle = -1
+        self.a_max_idle = -1
+        self.a_std_idle = -1
         #self.sflow_fpackets
         #self.sflow_fbytes
         #self.sflow_bpackets
@@ -169,33 +182,33 @@ class Flow:
         if pkt.proto == 6:
             # TCP specific
             # Create state machines for the client and server 
-            self.cstate = TCP_START() # Client state
-            self.sstate = TCP_START() # Server state
+            self._cstate = TCP_START() # Client state
+            self._sstate = TCP_START() # Server state
             # Set TCP flag stats
             flags = pkt.sprintf("%TCP.flags%")
             if (tcp_set(flags, "P")):
-                self.fpsh_cnt = 1
+                self.a_fpsh_cnt = 1
             else:
-                self.fpsh_cnt = 0
-            self.bpsh_cnt = 0
+                self.a_fpsh_cnt = 0
+            self.a_bpsh_cnt = 0
             if (tcp_set(flags, "U")):
-                self.furg_cnt = 1
+                self.a_furg_cnt = 1
             else:
-                self.furg_cnt = 0
-            self.burg_cnt = 0
-        self.total_fhlen = 0
-        self.total_bhlen = 0
+                self.a_furg_cnt = 0
+            self.a_burg_cnt = 0
+        self.a_total_fhlen = 0
+        self.a_total_bhlen = 0
         self.update_status(pkt)
 
     def __repr__(self):
         return "[%d:(%s,%d,%s,%d,%d)]" % \
-            (self.id, self.srcip, self.srcport, self.dstip, self.dstport, self.proto)
+            (self._id, self.a_srcip, self.a_srcport, self.a_dstip, self.a_dstport, self.a_proto)
 
     def __str__(self):
         return ','.join(map(str, [
-                        self.id,
-                        self.total_fpackets, self.total_fvolume,
-                        self.total_bpackets, self.total_bvolume]))
+                        self._id,
+                        self.a_total_fpackets, self.a_total_fvolume,
+                        self.a_total_bpackets, self.a_total_bvolume]))
 
     def update_tcp_state(self, pkt):
         '''
@@ -212,11 +225,11 @@ class Flow:
         flags = pkt.sprintf("%TCP.flags%")
         log.debug("FLAGS: %s" % (flags))
         # Update client state
-        self.cstate = self.cstate.update(flags, "f", self._pdir)
-        log.debug("Updating TCP connection cstate to %s" % (self.cstate))
+        self._cstate = self._cstate.update(flags, "f", self._pdir)
+        log.debug("Updating TCP connection cstate to %s" % (self._cstate))
         # Update server state
-        self.sstate = self.sstate.update(flags, "b", self._pdir)
-        log.debug("Updating TCP connection sstate to %s" % (self.sstate))
+        self._sstate = self._sstate.update(flags, "b", self._pdir)
+        log.debug("Updating TCP connection sstate to %s" % (self._sstate))
 
     def update_status(self, pkt):
         '''
@@ -236,20 +249,20 @@ class Flow:
         if pkt.proto == 19:
             # UDP
             # Skip if already labelled valid
-            if self.valid: return
+            if self._valid: return
             # Check if a packet has been received from backward direction. One
             # packet has already been sent in forward direction to initiate.
             if pkt.len > 8:
                 # TODO: Check for 1 packet in each direction
-                self.valid = True
+                self._valid = True
         elif pkt.proto == 6:
             # TCP
-            if isinstance(self.cstate, TCP_ESTABLISHED):
+            if isinstance(self._cstate, TCP_ESTABLISHED):
                 hlen, _, _ = self.get_header_lengths(pkt)
                 if pkt.len > hlen:
                     #TODO: Why would we need a hasdata variable such as in NM?
-                    self.valid = True
-            if not self.valid:
+                    self._valid = True
+            if not self._valid:
                 #Check validity
                 pass
             self.update_tcp_state(pkt)
@@ -268,12 +281,12 @@ class Flow:
         Returns:
             The timestamp of the last packet.
         '''
-        if (self.blast == 0):
-            return self.flast
-        elif (self.flast == 0):
-            return self.blast
+        if (self._blast == 0):
+            return self._flast
+        elif (self._flast == 0):
+            return self._blast
         else:
-            return self.flast if (self.flast > self.blast) else self.blast
+            return self._flast if (self._flast > self._blast) else self._blast
 
     def get_header_lengths(self, pkt):
         '''
@@ -315,7 +328,7 @@ class Flow:
                                 # TODO: verify this is working correctly.
         log.debug("dscp: %s" % (dscp))
         now = pkt.time
-        assert (now >= self.first)
+        assert (now >= self._first)
 
         # Ignore re-ordered packets
         if (now < self.get_last_time()):
@@ -325,7 +338,7 @@ class Flow:
 
         # Update the global variable _pdir which holds the direction of the
         # packet currently in question.  
-        if (pkt[IP].src == self.first_packet[IP].src):
+        if (pkt[IP].src == self._first_packet[IP].src):
             self._pdir = "f"
         else:
             self._pdir = "b"
@@ -334,37 +347,42 @@ class Flow:
         self.update_status(pkt)
         # Set attributes.
 
-
+        diff = now - self.get_last_time()
+        if diff > IDLE_THRESHOLD:
+            if diff > self.a_max_idle:
+                self.a_max_idle = diff
+            if diff < self.a_min_idle or self.a_min_idle == -1:
+                self.a_min_idle = diff
         # Set bi-directional attributes.
         if self._pdir == "f":
             # Packet is travelling in the forward direction
             # Calculate some statistics
-            self.total_fpackets += 1
-            self.total_fvolume += len
-            self.total_fhlen += hlen
+            self.a_total_fpackets += 1
+            self.a_total_fvolume += len
+            self.a_total_fhlen += hlen
             if pkt.proto == 6:
                 # Packet is using TCP protocol
                 flags = pkt.sprintf("%TCP.flags%")
                 if (tcp_set(flags, "P")):
-                    self.fpsh_cnt += 1
+                    self.a_fpsh_cnt += 1
                 if (tcp_set(flags, "U")):
-                    self.furg_cnt += 1
+                    self.a_furg_cnt += 1
             # Update the last forward packet time stamp
-            self.flast = now
+            self._flast = now
         else:
             # Packet is travelling in the backward direction
             # Calculate some statistics
-            self.total_bpackets += 1
-            self.total_bvolume += len
-            self.total_bhlen += hlen
+            self.a_total_bpackets += 1
+            self.a_total_bvolume += len
+            self.a_total_bhlen += hlen
             if pkt.proto == 6:
                 # Packet is using TCP protocol
                 flags = pkt.sprintf("%TCP.flags%")
                 if (tcp_set(flags, "P")):
-                    self.bpsh_cnt += 1
+                    self.a_bpsh_cnt += 1
                 if (tcp_set(flags, "U")):
                     self.burg_cnt += 1
             # Update the last backward packet time stamp
-            self.blast = now
+            self._blast = now
 
 #--------------------------------------------------------------------- End: Flow
