@@ -149,14 +149,16 @@ class Flow:
         self.a_total_fvolume = pkt.len
         self.a_total_bpackets = 0
         self.a_total_bvolume = 0
-        self.a_min_fpktl = -1
+        self.a_min_fpktl = 0
         self.a_mean_fpktl = 0
         self.a_max_fpktl = 0
         self.a_std_fpktl = 0
-        self.a_min_bpktl = -1
+        self.c_fpktl_sqsum = 0
+        self.a_min_bpktl = 0
         self.a_mean_bpktl = 0
         self.a_max_bpktl = 0
         self.a_std_bpktl = 0
+        self.c_bpktl_sqsum = 0
         #self.a_min_fiat
         #self.a_mean_fiat
         #self.a_max_fiat
@@ -383,10 +385,15 @@ class Flow:
             # Packet is travelling in the forward direction
             # Calculate some statistics
 
-            #Packet length
-
+            # Packet length
+            if len < self.a_min_fpktl or self.a_min_fpktl == 0:
+                self.a_min_fpktl = len
+            if len > self.a_max_fpktl:
+                self.a_max_fpktl = len
+            self.a_total_fvolume += len # Doubles up as c_fpktl_sum from NM
+            self.c_fpktl_sqsum += (len ** 2)
             self.a_total_fpackets += 1
-            self.a_total_fvolume += len
+
             self.a_total_fhlen += hlen
             if pkt.proto == 6:
                 # Packet is using TCP protocol
@@ -400,8 +407,14 @@ class Flow:
         else:
             # Packet is travelling in the backward direction
             # Calculate some statistics
+            # Packet length
+            if len < self.a_min_bpktl or self.a_min_bpktl == 0:
+                self.a_min_bpktl = len
+            if len > self.a_max_bpktl:
+                self.a_max_bpktl = len
+            self.a_total_bvolume += len # Doubles up as c_bpktl_sum from NM
+            self.c_bpktl_sqsum += (len ** 2)
             self.a_total_bpackets += 1
-            self.a_total_bvolume += len
             self.a_total_bhlen += hlen
             if pkt.proto == 6:
                 # Packet is using TCP protocol
