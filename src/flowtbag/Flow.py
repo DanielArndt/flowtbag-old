@@ -149,14 +149,14 @@ class Flow:
         self.a_total_fvolume = pkt.len
         self.a_total_bpackets = 0
         self.a_total_bvolume = 0
-        #self.a_min_fpktl
-        #self.a_mean_fpktl
-        #self.a_max_fpktl
-        #self.a_std_fpktl
-        #self.a_min_bpktl
-        #self.a_mean_bpktl
-        #self.a_max_bpktl
-        #self.a_std_bpktl
+        self.a_min_fpktl = -1
+        self.a_mean_fpktl = 0
+        self.a_max_fpktl = 0
+        self.a_std_fpktl = 0
+        self.a_min_bpktl = -1
+        self.a_mean_bpktl = 0
+        self.a_max_bpktl = 0
+        self.a_std_bpktl = 0
         #self.a_min_fiat
         #self.a_mean_fiat
         #self.a_max_fiat
@@ -166,15 +166,21 @@ class Flow:
         #self.a_max_biat
         #self.a_std_biat
         #self.a_duration
-        #self.a_min_active
-        #self.a_mean_active
-        #self.a_max_active
-        #self.a_std_active
-        self.c_idle_total
+        self.a_min_active = -1
+        self.a_mean_active = -1
+        self.a_max_active = -1
+        self.a_std_active = -1
+        self.c_active_time = 0
+        self.c_active_sqsum = 0
+        self.c_active_packets = 0
         self.a_min_idle = -1
         self.a_mean_idle = -1
         self.a_max_idle = -1
         self.a_std_idle = -1
+        self.c_idle_time = 0
+        self.c_idle_sqsum = 0
+        self.c_idle_packets = 0
+        self.c_active_start = self._first
         #self.sflow_fpackets
         #self.sflow_fbytes
         #self.sflow_bpackets
@@ -202,7 +208,8 @@ class Flow:
 
     def __repr__(self):
         return "[%d:(%s,%d,%s,%d,%d)]" % \
-            (self._id, self.a_srcip, self.a_srcport, self.a_dstip, self.a_dstport, self.a_proto)
+            (self._id, self.a_srcip, self.a_srcport, self.a_dstip,
+             self.a_dstport, self.a_proto)
 
     def __str__(self):
         return ','.join(map(str, [
@@ -297,9 +304,9 @@ class Flow:
             pkt - The packet for which the header lengths are to be retrieved.
         
         Returns:
-            hlen - The total header length.
-            protohlen - The protocol specific (TCP or UDP) header length.
-            iphlen - The length of the internet protocol header. 
+            [0] - The total header length.
+            [1] - The protocol specific (TCP or UDP) header length.
+            [2] - The length of the internet protocol header. 
         '''
         # iphlen - Length of the IP header
         iphlen = pkt[IP].ihl * 32 / 8 # ihl field * 32-bits / 8 bits in a byte
@@ -349,14 +356,35 @@ class Flow:
 
         diff = now - self.get_last_time()
         if diff > IDLE_THRESHOLD:
+            # The flow has been idle, so calc idle time stats
             if diff > self.a_max_idle:
                 self.a_max_idle = diff
-            if diff < self.a_min_idle or self.a_min_idle == -1:
+            if diff < self.a_min_idle or self.a_min_idle < 0:
                 self.a_min_idle = diff
+            self.c_idle_time += diff
+            self.c_idle_sqsum += (diff ** 2)
+            self.c_idle_packets += 1
+            # Active time stats - calculated by looking at the previous packet
+            # time and the packet time for when the last idle time ended.
+            diff = self.get_last_time() - self.c_active_start
+            if diff > self.a_max_active:
+                self.a_max_active = diff
+            if diff < self.a_min_active or self.a_min_active < 0:
+                self.a_min_active = diff
+            self.c_active_time += diff
+            self.c_active_sqsum += (diff ** 2)
+            self.c_active_packets += 1
+            self._flast = 0
+            self._blast = 0
+            self.c_active_start = now
+
         # Set bi-directional attributes.
         if self._pdir == "f":
             # Packet is travelling in the forward direction
             # Calculate some statistics
+
+            #Packet length
+
             self.a_total_fpackets += 1
             self.a_total_fvolume += len
             self.a_total_fhlen += hlen
