@@ -98,13 +98,11 @@ class TCP_FIN(TCP_STATE):
 
 class TCP_CLOSED(TCP_STATE):
     tr = []
-
 #-------------------------------------------------------- End: TCP state machine
 
 #==============================================================================#
 # Begin code for Flow class                                                    #
 #==============================================================================#
-
 class Flow:
     '''
     Represents one flow to be stored in a flowtbag.
@@ -159,30 +157,36 @@ class Flow:
         self.a_max_bpktl = 0
         self.a_std_bpktl = 0
         self.c_bpktl_sqsum = 0
-        #self.a_min_fiat
-        #self.a_mean_fiat
-        #self.a_max_fiat
-        #self.a_std_fiat
-        #self.a_min_biat
-        #self.a_mean_biat
-        #self.a_max_biat
-        #self.a_std_biat
+        self.a_min_fiat = 0
+        self.a_mean_fiat = 0
+        self.a_max_fiat = 0
+        self.a_std_fiat = 0
+        self.c_fiat_sum = 0
+        self.c_fiat_sqsum = 0
+        self.c_fiat_count = 0
+        self.a_min_biat = 0
+        self.a_mean_biat = 0
+        self.a_max_biat = 0
+        self.a_std_biat = 0
+        self.c_biat_sum = 0
+        self.c_biat_sqsum = 0
+        self.c_biat_count = 0
         #self.a_duration
         self.a_min_active = -1
         self.a_mean_active = -1
         self.a_max_active = -1
         self.a_std_active = -1
+        self.c_active_start = self._first
         self.c_active_time = 0
         self.c_active_sqsum = 0
-        self.c_active_packets = 0
+        self.c_active_count = 0
         self.a_min_idle = -1
         self.a_mean_idle = -1
         self.a_max_idle = -1
         self.a_std_idle = -1
         self.c_idle_time = 0
         self.c_idle_sqsum = 0
-        self.c_idle_packets = 0
-        self.c_active_start = self._first
+        self.c_idle_count = 0
         #self.sflow_fpackets
         #self.sflow_fbytes
         #self.sflow_bpackets
@@ -338,24 +342,20 @@ class Flow:
         log.debug("dscp: %s" % (dscp))
         now = pkt.time
         assert (now >= self._first)
-
         # Ignore re-ordered packets
         if (now < self.get_last_time()):
             log.debug("Flow: ignoring reordered packet. %d < %d" %
                       (now, self.get_last))
             raise NotImplementedError
-
         # Update the global variable _pdir which holds the direction of the
         # packet currently in question.  
         if (pkt[IP].src == self._first_packet[IP].src):
             self._pdir = "f"
         else:
             self._pdir = "b"
-
         # Update the status (validity, TCP connection state) of the flow.
         self.update_status(pkt)
         # Set attributes.
-
         diff = now - self.get_last_time()
         if diff > IDLE_THRESHOLD:
             # The flow has been idle, so calc idle time stats
@@ -365,7 +365,7 @@ class Flow:
                 self.a_min_idle = diff
             self.c_idle_time += diff
             self.c_idle_sqsum += (diff ** 2)
-            self.c_idle_packets += 1
+            self.c_idle_count += 1
             # Active time stats - calculated by looking at the previous packet
             # time and the packet time for when the last idle time ended.
             diff = self.get_last_time() - self.c_active_start
@@ -375,16 +375,14 @@ class Flow:
                 self.a_min_active = diff
             self.c_active_time += diff
             self.c_active_sqsum += (diff ** 2)
-            self.c_active_packets += 1
+            self.c_active_count += 1
             self._flast = 0
             self._blast = 0
             self.c_active_start = now
-
         # Set bi-directional attributes.
         if self._pdir == "f":
             # Packet is travelling in the forward direction
             # Calculate some statistics
-
             # Packet length
             if len < self.a_min_fpktl or self.a_min_fpktl == 0:
                 self.a_min_fpktl = len
@@ -393,8 +391,17 @@ class Flow:
             self.a_total_fvolume += len # Doubles up as c_fpktl_sum from NM
             self.c_fpktl_sqsum += (len ** 2)
             self.a_total_fpackets += 1
-
             self.a_total_fhlen += hlen
+            # Interarrival time
+            if self._flast > 0:
+                diff = now - self._flast
+                if diff < self.a_min_fiat or self.a_min_fiat == 0:
+                    self.a_min_fiat = diff
+                if diff > self.a_max_fiat:
+                    self.a_max_fiat = diff
+                self.c_fiat_sum += diff
+                self.c_fiat_sqsum += (diff ** 2)
+                self.c_fiat_count += 1
             if pkt.proto == 6:
                 # Packet is using TCP protocol
                 flags = pkt.sprintf("%TCP.flags%")
@@ -416,6 +423,16 @@ class Flow:
             self.c_bpktl_sqsum += (len ** 2)
             self.a_total_bpackets += 1
             self.a_total_bhlen += hlen
+            # Interarrival time
+            if self._blast > 0:
+                diff = now - self._blast
+                if diff < self.a_min_biat or self.a_min_biat == 0:
+                    self.a_min_biat = diff
+                if diff > self.a_max_biat:
+                    self.a_max_biat = diff
+                self.c_biat_sum += diff
+                self.c_biat_sqsum += (diff ** 2)
+                self.c_biat_count += 1
             if pkt.proto == 6:
                 # Packet is using TCP protocol
                 flags = pkt.sprintf("%TCP.flags%")
@@ -425,5 +442,4 @@ class Flow:
                     self.burg_cnt += 1
             # Update the last backward packet time stamp
             self._blast = now
-
 #--------------------------------------------------------------------- End: Flow
