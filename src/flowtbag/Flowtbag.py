@@ -23,14 +23,13 @@
 from scapy.all import *
 from Flow import Flow
 
-#Set up logging system.
+#Set up default logging system.
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
-formatter = logging.Formatter(
-     "%(asctime)s;%(levelname)s:%(message)s - %(filename)s:%(lineno)s",
-     "%H:%M:%S")
+formatter = logging.Formatter("%(asctime)s;%(levelname)s:: %(message)s :: %(filename)s:%(lineno)s",
+                              "%H:%M:%S")
 ch.setFormatter(formatter)
 log.addHandler(ch)
 
