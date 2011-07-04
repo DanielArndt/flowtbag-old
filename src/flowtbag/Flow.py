@@ -29,6 +29,10 @@ FLOW_TIMEOUT = 600 # Flow timeout in seconds
 IDLE_THRESHOLD = 1.0
 #----------------------------------------------------------------- End: Settings
 
+def stddev(sqsum, sum, count):
+    log.debug("sqsum, sum, count: %d, %d, %d" % (sqsum, sum, count))
+    return long(math.sqrt((sqsum - (sum ** 2 / count)) / (count - 1)))
+
 def tcp_set(flags, find):
     '''
     Checks if a flag is set or not.
@@ -151,7 +155,7 @@ class Flow:
         self.a_mean_fpktl = 0
         self.a_max_fpktl = 0
         self.a_std_fpktl = 0
-        self.c_fpktl_sqsum = 0
+        self.c_fpktl_sqsum = (pkt.len ** 2)
         self.a_min_bpktl = 0
         self.a_mean_bpktl = 0
         self.a_max_bpktl = 0
@@ -218,10 +222,27 @@ class Flow:
              self.a_dstport, self.a_proto)
 
     def __str__(self):
-        return ','.join(map(str, [
-                        self._id,
-                        self.a_total_fpackets, self.a_total_fvolume,
-                        self.a_total_bpackets, self.a_total_bvolume]))
+        '''
+        Exports the stats collected.
+        '''
+        export = [self.a_srcip,
+                  self.a_srcport,
+                  self.a_dstip,
+                  self.a_dstport,
+                  self.a_proto,
+                  self.a_total_fpackets,
+                  self.a_total_fvolume,
+                  self.a_total_bpackets,
+                  self.a_total_bvolume,
+                  self.a_min_fpktl,
+                  self.a_total_fvolume / self.a_total_fpackets,
+                  self.a_max_fpktl
+                  ]
+        export.append(stddev(self.c_fpktl_sqsum,
+                             self.a_total_fvolume,
+                             self.a_total_fpackets)
+                      if self.a_total_fpackets > 1 else 0)
+        return '(' + ','.join(map(str, export)) + ')'
 
     def update_tcp_state(self, pkt):
         '''
