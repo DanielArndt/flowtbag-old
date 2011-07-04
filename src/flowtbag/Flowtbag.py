@@ -94,7 +94,8 @@ class Flowtbag:
             log.debug("Adding packet %d to flow %s" % \
                 (self.count, repr(flow)))
             flow.add(pkt)
-            log.debug("At: %s" % (flow))
+            log.debug("Current flows stats:")
+            log.debug("%s" % (flow))
 
 if __name__ == '__main__':
     Flowtbag()

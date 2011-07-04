@@ -30,7 +30,7 @@ IDLE_THRESHOLD = 1.0
 #----------------------------------------------------------------- End: Settings
 
 def stddev(sqsum, sum, count):
-    log.debug("sqsum, sum, count: %d, %d, %d" % (sqsum, sum, count))
+    #log.debug("sqsum, sum, count: %d, %d, %d" % (sqsum, sum, count))
     return long(math.sqrt((sqsum - (sum ** 2 / count)) / (count - 1)))
 
 def tcp_set(flags, find):
@@ -225,7 +225,15 @@ class Flow:
         '''
         Exports the stats collected.
         '''
-        export = [self.a_srcip,
+        self.a_mean_fpktl = self.a_total_fvolume / self.a_total_fpackets
+        self.a_std_fpktl = stddev(self.c_fpktl_sqsum,
+                             self.a_total_fvolume,
+                             self.a_total_fpackets) \
+                             if self.a_total_fpackets > 1 else 0
+        self.mean_bpktl = self.a_total_bvolume / self.a_total_bpackets
+
+        export = [
+                  self.a_srcip,
                   self.a_srcport,
                   self.a_dstip,
                   self.a_dstport,
@@ -235,13 +243,44 @@ class Flow:
                   self.a_total_bpackets,
                   self.a_total_bvolume,
                   self.a_min_fpktl,
-                  self.a_total_fvolume / self.a_total_fpackets,
-                  self.a_max_fpktl
+                  self.a_mean_fpktl,
+                  self.a_max_fpktl,
+                  self.a_std_fpktl,
+                  self.a_min_bpktl,
+                  self.a_mean_bpktl
+# @ATTRIBUTE max_bpktl NUMERIC
+# @ATTRIBUTE std_bpktl NUMERIC
+# @ATTRIBUTE min_fiat NUMERIC
+# @ATTRIBUTE mean_fiat NUMERIC
+# @ATTRIBUTE max_fiat NUMERIC
+# @ATTRIBUTE std_fiat NUMERIC
+# @ATTRIBUTE min_biat NUMERIC
+# @ATTRIBUTE mean_biat NUMERIC
+# @ATTRIBUTE max_biat NUMERIC
+# @ATTRIBUTE std_biat NUMERIC
+# @ATTRIBUTE duration NUMERIC
+# @ATTRIBUTE min_active NUMERIC
+# @ATTRIBUTE mean_active NUMERIC
+# @ATTRIBUTE max_active NUMERIC
+# @ATTRIBUTE std_active NUMERIC
+# @ATTRIBUTE min_idle NUMERIC
+# @ATTRIBUTE mean_idle NUMERIC
+# @ATTRIBUTE max_idle NUMERIC
+# @ATTRIBUTE std_idle NUMERIC
+# @ATTRIBUTE sflow_fpackets NUMERIC
+# @ATTRIBUTE sflow_fbytes NUMERIC
+# @ATTRIBUTE sflow_bpackets NUMERIC
+# @ATTRIBUTE sflow_bbytes NUMERIC
+# @ATTRIBUTE fpsh_cnt NUMERIC
+# @ATTRIBUTE bpsh_cnt NUMERIC
+# @ATTRIBUTE furg_cnt NUMERIC
+# @ATTRIBUTE burg_cnt NUMERIC
+# @ATTRIBUTE total_fhlen NUMERIC
+# @ATTRIBUTE total_bhlen NUMERIC
                   ]
-        export.append(stddev(self.c_fpktl_sqsum,
-                             self.a_total_fvolume,
-                             self.a_total_fpackets)
-                      if self.a_total_fpackets > 1 else 0)
+        export.append(
+
+                      )
         return '(' + ','.join(map(str, export)) + ')'
 
     def update_tcp_state(self, pkt):
