@@ -57,7 +57,8 @@ class TCP_STATE(object):
     Defines the behavior of a state within a generalized finite state machine.
     Currently, the rules perfectly resemble those used by NetMate
     '''
-    #TODO: Update the state machine to include more robust checks.
+    #TODO: Update the state machine to include more robust checks. Current 
+    # implementation imitates NetMate state machine. 
     def update(self, flags, dir, _pdir):
         '''
         Updates the TCP state machine.
@@ -175,7 +176,7 @@ class Flow:
         self.c_biat_sum = 0
         self.c_biat_sqsum = 0
         self.c_biat_count = 0
-        #self.a_duration
+        self.a_duration = 0 #TODO: Count this
         self.a_min_active = -1
         self.a_mean_active = -1
         self.a_max_active = -1
@@ -191,10 +192,10 @@ class Flow:
         self.c_idle_time = 0
         self.c_idle_sqsum = 0
         self.c_idle_count = 0
-        #self.sflow_fpackets
-        #self.sflow_fbytes
-        #self.sflow_bpackets
-        #self.sflow_bbytes
+        self.a_sflow_fpackets = 0
+        self.a_sflow_fbytes = 0
+        self.a_sflow_bpackets = 0
+        self.a_sflow_bbytes = 0
         if pkt.proto == 6:
             # TCP specific
             # Create state machines for the client and server 
@@ -227,10 +228,45 @@ class Flow:
         '''
         self.a_mean_fpktl = self.a_total_fvolume / self.a_total_fpackets
         self.a_std_fpktl = stddev(self.c_fpktl_sqsum,
-                             self.a_total_fvolume,
-                             self.a_total_fpackets) \
-                             if self.a_total_fpackets > 1 else 0
-        self.mean_bpktl = self.a_total_bvolume / self.a_total_bpackets
+                                  self.a_total_fvolume,
+                                  self.a_total_fpackets) \
+            if self.a_total_fpackets > 1 else (0)
+        self.a_mean_bpktl = self.a_total_bvolume / self.a_total_bpackets \
+            if self.a_total_bpackets > 0 else (-1)
+        self.a_std_bpktl = stddev(self.c_bpktl_sqsum,
+                                  self.a_total_bvolume,
+                                  self.a_total_bpackets) \
+            if self.a_total_bpackets > 1 else (0)
+        self.a_mean_fiat = self.c_fiat_sum / self.c_fiat_count \
+            if self.c_fiat_count > 0 else (0)
+        self.a_std_fiat = stddev(self.c_fiat_sqsum,
+                                 self.c_fiat_sum,
+                                 self.c_fiat_count) \
+            if self.c_fiat_count > 1 else (0)
+        self.a_mean_biat = self.c_biat_sum / self.c_biat_count \
+            if self.c_biat_count > 0 else (0)
+        self.a_std_biat = stddev(self.c_biat_sqsum,
+                                 self.c_biat_sum,
+                                 self.c_biat_count) \
+            if self.c_biat_count > 1 else (0)
+        self.a_mean_active = self.c_active_time / self.c_active_count \
+            if self.c_active_count > 0 else log.debug("ERR: This shouldn't happen")
+        self.a_std_active = stddev(self.c_active_sqsum,
+                                   self.c_active_time,
+                                   self.c_active_count) \
+            if self.c_active_count > 1 else (0)
+        self.a_mean_idle = self.c_idle_time / self.c_idle_count \
+            if self.c_idle_count > 0 else (0)
+        self.a_std_idle = stddev(self.c_idle_sqsum,
+                                 self.c_idle_time,
+                                 self.c_idle_count) \
+            if self.c_idle_count > 1 else (0)
+        if self.c_active_count > 0:
+            self.a_sflow_fpackets = self.a_total_fpackets / self.c_active_count
+            self.a_sflow_fbytes = self.a_total_bpackets / self.c_active_count
+            self.a_sflow_bpackets = self.a_total_bpackets / self.c_active_count
+            self.a_sflow_bbytes = self.a_total_bpackets / self.c_active_count
+        self.a_duration = self.get_last_time() - self._first
 
         export = [
                   self.a_srcip,
@@ -247,40 +283,40 @@ class Flow:
                   self.a_max_fpktl,
                   self.a_std_fpktl,
                   self.a_min_bpktl,
-                  self.a_mean_bpktl
-# @ATTRIBUTE max_bpktl NUMERIC
-# @ATTRIBUTE std_bpktl NUMERIC
-# @ATTRIBUTE min_fiat NUMERIC
-# @ATTRIBUTE mean_fiat NUMERIC
-# @ATTRIBUTE max_fiat NUMERIC
-# @ATTRIBUTE std_fiat NUMERIC
-# @ATTRIBUTE min_biat NUMERIC
-# @ATTRIBUTE mean_biat NUMERIC
-# @ATTRIBUTE max_biat NUMERIC
-# @ATTRIBUTE std_biat NUMERIC
-# @ATTRIBUTE duration NUMERIC
-# @ATTRIBUTE min_active NUMERIC
-# @ATTRIBUTE mean_active NUMERIC
-# @ATTRIBUTE max_active NUMERIC
-# @ATTRIBUTE std_active NUMERIC
-# @ATTRIBUTE min_idle NUMERIC
-# @ATTRIBUTE mean_idle NUMERIC
-# @ATTRIBUTE max_idle NUMERIC
-# @ATTRIBUTE std_idle NUMERIC
-# @ATTRIBUTE sflow_fpackets NUMERIC
-# @ATTRIBUTE sflow_fbytes NUMERIC
-# @ATTRIBUTE sflow_bpackets NUMERIC
-# @ATTRIBUTE sflow_bbytes NUMERIC
-# @ATTRIBUTE fpsh_cnt NUMERIC
-# @ATTRIBUTE bpsh_cnt NUMERIC
-# @ATTRIBUTE furg_cnt NUMERIC
-# @ATTRIBUTE burg_cnt NUMERIC
-# @ATTRIBUTE total_fhlen NUMERIC
-# @ATTRIBUTE total_bhlen NUMERIC
+                  self.a_mean_bpktl,
+                  self.a_max_bpktl,
+                  self.a_std_bpktl,
+                  self.a_min_fiat,
+                  self.a_mean_fiat,
+                  self.a_max_fiat,
+                  self.a_std_fiat,
+                  self.a_min_biat,
+                  self.a_mean_biat,
+                  self.a_max_biat,
+                  self.a_std_biat,
+                  self.a_duration,
+                  # TODO: Possibly need to add the last active time? This is
+                  # done in NM l645. Need to confirm whether this is needed for
+                  # our implementation. (DA: don't think so) 
+                  self.a_min_active,
+                  self.a_mean_active,
+                  self.a_max_active,
+                  self.a_std_active,
+                  self.a_min_idle,
+                  self.a_mean_idle,
+                  self.a_max_idle,
+                  self.a_std_idle,
+                  self.a_sflow_fpackets,
+                  self.a_sflow_fbytes,
+                  self.a_sflow_bpackets,
+                  self.a_sflow_bbytes,
+                  self.a_fpsh_cnt,
+                  self.a_bpsh_cnt,
+                  self.a_furg_cnt,
+                  self.a_burg_cnt,
+                  self.a_total_fhlen,
+                  self.a_total_bhlen
                   ]
-        export.append(
-
-                      )
         return '(' + ','.join(map(str, export)) + ')'
 
     def update_tcp_state(self, pkt):
