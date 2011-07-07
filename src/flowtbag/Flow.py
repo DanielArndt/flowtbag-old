@@ -139,7 +139,7 @@ class Flow:
         self._valid = False
         self._pdir = "f"
         self._first = pkt.time
-        self._flast = 0
+        self._flast = pkt.time
         self._blast = 0
         # Basic flow identification criteria
         self.a_srcip = pkt[IP].src
@@ -332,7 +332,6 @@ class Flow:
                   for the flow.
         '''
         flags = pkt.sprintf("%TCP.flags%")
-        log.debug("FLAGS: %s" % (flags))
         # Update client state
         self._cstate = self._cstate.update(flags, "f", self._pdir)
         log.debug("Updating TCP connection cstate to %s" % (self._cstate))
@@ -429,19 +428,30 @@ class Flow:
         
         Args:
             pkt: The packet to be added
+        Returns:
+            0 - the packet is successfully added to the flow
+            1 - the flow is complete with this packet (ie. TCP connect closed)
+            2 - the packet is not part of this flow. (ie. flow timeout exceeded) 
         '''
+        # TODO: Robust check of whether or not the packet is part of the flow.
+        now = pkt.time
+        last = self.get_last_time()
+        diff = now - last
+        log.debug("NOW: %f LAST: %f DIFF: %f" % (now, last, diff))
+        if diff > FLOW_TIMEOUT:
+            return 2
+
         len = pkt.len
         # iphlen - Length of the IP header
         hlen, _, _ = self.get_header_lengths(pkt)
         dscp = pkt[IP].tos >> 2 # Bit shift twice to the right to get DSCP only
                                 # TODO: verify this is working correctly.
-        log.debug("dscp: %s" % (dscp))
-        now = pkt.time
+
         assert (now >= self._first)
         # Ignore re-ordered packets
-        if (now < self.get_last_time()):
+        if (now < last):
             log.debug("Flow: ignoring reordered packet. %d < %d" %
-                      (now, self.get_last))
+                      (now, last))
             raise NotImplementedError
         # Update the global variable _pdir which holds the direction of the
         # packet currently in question.  
@@ -452,7 +462,6 @@ class Flow:
         # Update the status (validity, TCP connection state) of the flow.
         self.update_status(pkt)
         # Set attributes.
-        diff = now - self.get_last_time()
         if diff > IDLE_THRESHOLD:
             # The flow has been idle, so calc idle time stats
             if diff > self.a_max_idle:
@@ -464,7 +473,7 @@ class Flow:
             self.c_idle_count += 1
             # Active time stats - calculated by looking at the previous packet
             # time and the packet time for when the last idle time ended.
-            diff = self.get_last_time() - self.c_active_start
+            diff = last - self.c_active_start
             if diff > self.a_max_active:
                 self.a_max_active = diff
             if diff < self.a_min_active or self.a_min_active < 0:
@@ -538,4 +547,11 @@ class Flow:
                     self.burg_cnt += 1
             # Update the last backward packet time stamp
             self._blast = now
+        #((proto == 6) && (data->cstate == STATE_CLOSED) && (data->sstate == STATE_CLOSED))
+        if (pkt.proto == 6 and
+            isinstance(self._cstate, TCP_CLOSED) and
+            isinstance(self._sstate, TCP_CLOSED)):
+            return 1
+        else:
+            return 0
 #--------------------------------------------------------------------- End: Flow
