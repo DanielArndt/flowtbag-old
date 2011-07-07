@@ -547,7 +547,6 @@ class Flow:
                     self.burg_cnt += 1
             # Update the last backward packet time stamp
             self._blast = now
-        #((proto == 6) && (data->cstate == STATE_CLOSED) && (data->sstate == STATE_CLOSED))
         if (pkt.proto == 6 and
             isinstance(self._cstate, TCP_CLOSED) and
             isinstance(self._sstate, TCP_CLOSED)):
