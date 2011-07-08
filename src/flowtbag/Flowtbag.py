@@ -20,6 +20,7 @@
    @author: Daniel Arndt <danielarndt@gmail.com>
 '''
 
+import sys
 from scapy.all import *
 from Flow import Flow
 
@@ -61,7 +62,8 @@ class Flowtbag:
         return "I am a Flowtbag of size %s" % (len(self.active_flows))
 
     def exportAll(self):
-        print "Export."
+        for flow in self.active_flows.values():
+            print "%s" % (flow)
 
     def create_flow(self, pkt, flow_tuple):
         self.flow_count += 1
@@ -102,10 +104,14 @@ class Flowtbag:
             #    (self.count, repr(flow)))
             return_val = flow.add(pkt)
             if return_val > 0:
-                log.debug("Current flows stats: %d" % (return_val))
-                log.debug("%s" % (flow))
+                #log.debug("Current flows stats: %d" % (return_val))
+                print "%s" % (flow)
+                del self.active_flows[flow_tuple]
 
 if __name__ == '__main__':
     log.debug("Flowtbag begin")
-    Flowtbag()
+    if len(sys.argv) > 0:
+        Flowtbag(sys.argv[1])
+    else:
+        Flowtbag()
     log.debug("Flowtbag end")
