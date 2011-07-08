@@ -152,9 +152,9 @@ class Flow:
         self.a_total_fvolume = pkt.len
         self.a_total_bpackets = 0
         self.a_total_bvolume = 0
-        self.a_min_fpktl = 0
+        self.a_min_fpktl = pkt.len
         self.a_mean_fpktl = 0
-        self.a_max_fpktl = 0
+        self.a_max_fpktl = pkt.len
         self.a_std_fpktl = 0
         self.c_fpktl_sqsum = (pkt.len ** 2)
         self.a_min_bpktl = 0
@@ -184,7 +184,7 @@ class Flow:
         self.c_active_start = self._first
         self.c_active_time = 0
         self.c_active_sqsum = 0
-        self.c_active_count = 0
+        self.c_active_count = 1
         self.a_min_idle = -1
         self.a_mean_idle = -1
         self.a_max_idle = -1
@@ -334,10 +334,10 @@ class Flow:
         flags = pkt.sprintf("%TCP.flags%")
         # Update client state
         self._cstate = self._cstate.update(flags, "f", self._pdir)
-        log.debug("Updating TCP connection cstate to %s" % (self._cstate))
+        #log.debug("Updating TCP connection cstate to %s" % (self._cstate))
         # Update server state
         self._sstate = self._sstate.update(flags, "b", self._pdir)
-        log.debug("Updating TCP connection sstate to %s" % (self._sstate))
+        #log.debug("Updating TCP connection sstate to %s" % (self._sstate))
 
     def update_status(self, pkt):
         '''
@@ -437,7 +437,7 @@ class Flow:
         now = pkt.time
         last = self.get_last_time()
         diff = now - last
-        log.debug("NOW: %f LAST: %f DIFF: %f" % (now, last, diff))
+        #log.debug("NOW: %f LAST: %f DIFF: %f" % (now, last, diff))
         if diff > FLOW_TIMEOUT:
             return 2
 

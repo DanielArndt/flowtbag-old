@@ -50,6 +50,7 @@ class Flowtbag:
             self.flow_count = 0
             self.active_flows = {}
             sniff(offline=filename, prn=self.callback, store=0)
+            self.exportAll()
         except KeyboardInterrupt:
             exit(0)
 
@@ -58,6 +59,15 @@ class Flowtbag:
 
     def __str__(self):
         return "I am a Flowtbag of size %s" % (len(self.active_flows))
+
+    def exportAll(self):
+        print "Export."
+
+    def create_flow(self, pkt, flow_tuple):
+        self.flow_count += 1
+        flow = Flow(pkt, self.flow_count)
+        self.active_flows[flow_tuple] = flow
+        #log.debug("Created flow %s" % (flow))
 
     def callback(self, pkt):
         '''
@@ -84,20 +94,18 @@ class Flowtbag:
         # Find if a flow already exists for this tuple
         if flow_tuple not in self.active_flows:
             # The a flow of this tuple does not exists yet, create it.
-            self.flow_count += 1
-            flow = Flow(pkt, self.flow_count)
-            self.active_flows[flow_tuple] = flow
-            log.debug("Created flow %s" % (flow))
+            self.create_flow(pkt, flow_tuple)
         else:
             # A flow of this tuple already exists, add to it.
             flow = self.active_flows[flow_tuple]
-            log.debug("Adding packet %d to flow %s" % \
-                (self.count, repr(flow)))
-            ret = flow.add(pkt)
-            log.debug("Current flows stats: %d" % (ret))
-            log.debug("%s" % (flow))
+            #log.debug("Adding packet %d to flow %s" % \
+            #    (self.count, repr(flow)))
+            return_val = flow.add(pkt)
+            if return_val > 0:
+                log.debug("Current flows stats: %d" % (return_val))
+                log.debug("%s" % (flow))
 
 if __name__ == '__main__':
-    print "Flowtbag begin"
+    log.debug("Flowtbag begin")
     Flowtbag()
-    print "Flowtbag end"
+    log.debug("Flowtbag end")
