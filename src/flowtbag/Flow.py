@@ -30,7 +30,6 @@ IDLE_THRESHOLD = 1.0
 #----------------------------------------------------------------- End: Settings
 
 def stddev(sqsum, sum, count):
-    #log.debug("sqsum, sum, count: %d, %d, %d" % (sqsum, sum, count))
     return long(math.sqrt((sqsum - (sum ** 2 / count)) / (count - 1)))
 
 def tcp_set(flags, find):
@@ -141,13 +140,15 @@ class Flow:
         self._first = pkt.time
         self._flast = pkt.time
         self._blast = 0
-        # Basic flow identification criteria
+        #------------------------------------ Basic flow identification criteria
         self.a_srcip = pkt[IP].src
         self.a_srcport = pkt.sport
         self.a_dstip = pkt[IP].dst
         self.a_dstport = pkt.dport
         self.a_proto = pkt.proto
-        #
+        self.dscp = pkt[IP].tos >> 2 # Bit shift twice to the right to get DSCP
+                                     # TODO: verify this is working correctly.
+        #--------------------------------------------------------------------- #
         self.a_total_fpackets = 1
         self.a_total_fvolume = pkt.len
         self.a_total_bpackets = 0
@@ -295,9 +296,6 @@ class Flow:
                   self.a_max_biat,
                   self.a_std_biat,
                   self.a_duration,
-                  # TODO: Possibly need to add the last active time? This is
-                  # done in NM l645. Need to confirm whether this is needed for
-                  # our implementation. (DA: don't think so) 
                   self.a_min_active,
                   self.a_mean_active,
                   self.a_max_active,
@@ -317,7 +315,7 @@ class Flow:
                   self.a_total_fhlen,
                   self.a_total_bhlen
                   ]
-        return '(' + ','.join(map(str, export)) + ')'
+        return ','.join(map(str, export))
 
     def update_tcp_state(self, pkt):
         '''
@@ -334,10 +332,8 @@ class Flow:
         flags = pkt.sprintf("%TCP.flags%")
         # Update client state
         self._cstate = self._cstate.update(flags, "f", self._pdir)
-        #log.debug("Updating TCP connection cstate to %s" % (self._cstate))
         # Update server state
         self._sstate = self._sstate.update(flags, "b", self._pdir)
-        #log.debug("Updating TCP connection sstate to %s" % (self._sstate))
 
     def update_status(self, pkt):
         '''
@@ -437,16 +433,12 @@ class Flow:
         now = pkt.time
         last = self.get_last_time()
         diff = now - last
-        #log.debug("NOW: %f LAST: %f DIFF: %f" % (now, last, diff))
         if diff > FLOW_TIMEOUT:
             return 2
 
+        #Gather some statistics
         len = pkt.len
-        # iphlen - Length of the IP header
         hlen, _, _ = self.get_header_lengths(pkt)
-        dscp = pkt[IP].tos >> 2 # Bit shift twice to the right to get DSCP only
-                                # TODO: verify this is working correctly.
-
         assert (now >= self._first)
         # Ignore re-ordered packets
         if (now < last):
@@ -517,7 +509,12 @@ class Flow:
             # Update the last forward packet time stamp
             self._flast = now
         else:
-            # Packet is travelling in the backward direction
+            # Packet is travelling in the backward direction, check if dscp is
+            # set in this direction
+            if self._blast == 0 and self.dscp == 0:
+                # Check only first packet in backward dir, and make sure it has
+                # not been set already.
+                self.dscp = pkt[IP].tos >> 2
             # Calculate some statistics
             # Packet length
             if len < self.a_min_bpktl or self.a_min_bpktl == 0:
@@ -528,7 +525,7 @@ class Flow:
             self.c_bpktl_sqsum += (len ** 2)
             self.a_total_bpackets += 1
             self.a_total_bhlen += hlen
-            # Interarrival time
+            # Inter-arrival time
             if self._blast > 0:
                 diff = now - self._blast
                 if diff < self.a_min_biat or self.a_min_biat == 0:

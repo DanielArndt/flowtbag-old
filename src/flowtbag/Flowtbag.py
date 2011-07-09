@@ -69,7 +69,6 @@ class Flowtbag:
         self.flow_count += 1
         flow = Flow(pkt, self.flow_count)
         self.active_flows[flow_tuple] = flow
-        #log.debug("Created flow %s" % (flow))
 
     def callback(self, pkt):
         '''
@@ -100,13 +99,18 @@ class Flowtbag:
         else:
             # A flow of this tuple already exists, add to it.
             flow = self.active_flows[flow_tuple]
-            #log.debug("Adding packet %d to flow %s" % \
-            #    (self.count, repr(flow)))
             return_val = flow.add(pkt)
-            if return_val > 0:
-                #log.debug("Current flows stats: %d" % (return_val))
+            if return_val == 1:
+                #This packet ended the TCP connection. Export it.
                 print "%s" % (flow)
                 del self.active_flows[flow_tuple]
+            elif return_val == 2:
+                # This packet has been added to the wrong flow. This means the 
+                # previous flow has ended. We export the old flow, remove it,
+                # and create a new flow.
+                print "%s" % (flow)
+                del self.active_flows[flow_tuple]
+                self.create_flow(pkt, flow_tuple)
 
 if __name__ == '__main__':
     log.debug("Flowtbag begin")
