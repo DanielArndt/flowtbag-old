@@ -30,7 +30,7 @@ IDLE_THRESHOLD = 1.0
 #----------------------------------------------------------------- End: Settings
 
 def stddev(sqsum, sum, count):
-    return long(math.sqrt((sqsum - (sum ** 2 / count)) / (count - 1)))
+    return math.sqrt((sqsum - (sum ** 2 / count)) / (count - 1))
 
 def tcp_set(flags, find):
     '''
@@ -177,19 +177,19 @@ class Flow:
         self.c_biat_sum = 0
         self.c_biat_sqsum = 0
         self.c_biat_count = 0
-        self.a_duration = 0 #TODO: Count this
-        self.a_min_active = -1
-        self.a_mean_active = -1
-        self.a_max_active = -1
-        self.a_std_active = -1
+        self.a_duration = 0
+        self.a_min_active = 0
+        self.a_mean_active = 0
+        self.a_max_active = 0
+        self.a_std_active = 0
         self.c_active_start = self._first
         self.c_active_time = 0
         self.c_active_sqsum = 0
-        self.c_active_count = 1
-        self.a_min_idle = -1
-        self.a_mean_idle = -1
-        self.a_max_idle = -1
-        self.a_std_idle = -1
+        self.c_active_count = 0
+        self.a_min_idle = 0
+        self.a_mean_idle = 0
+        self.a_max_idle = 0
+        self.a_std_idle = 0
         self.c_idle_time = 0
         self.c_idle_sqsum = 0
         self.c_idle_count = 0
@@ -214,7 +214,7 @@ class Flow:
             else:
                 self.a_furg_cnt = 0
             self.a_burg_cnt = 0
-        self.a_total_fhlen = 0
+        self.a_total_fhlen, _, _ = self.get_header_lengths(pkt)
         self.a_total_bhlen = 0
         self.update_status(pkt)
 
@@ -227,6 +227,16 @@ class Flow:
         '''
         Exports the stats collected.
         '''
+        # Count the last active time
+        diff = self.get_last_time() - self.c_active_start
+        if diff > self.a_max_active:
+            self.a_max_active = diff
+        if diff < self.a_min_active or self.a_min_active == 0:
+            self.a_min_active = diff
+        self.c_active_time += diff
+        self.c_active_sqsum += (diff ** 2)
+        self.c_active_count += 1
+
         self.a_mean_fpktl = self.a_total_fvolume / self.a_total_fpackets
         self.a_std_fpktl = stddev(self.c_fpktl_sqsum,
                                   self.a_total_fvolume,
@@ -264,9 +274,9 @@ class Flow:
             if self.c_idle_count > 1 else (0)
         if self.c_active_count > 0:
             self.a_sflow_fpackets = self.a_total_fpackets / self.c_active_count
-            self.a_sflow_fbytes = self.a_total_bpackets / self.c_active_count
+            self.a_sflow_fbytes = self.a_total_fvolume / self.c_active_count
             self.a_sflow_bpackets = self.a_total_bpackets / self.c_active_count
-            self.a_sflow_bbytes = self.a_total_bpackets / self.c_active_count
+            self.a_sflow_bbytes = self.a_total_bvolume / self.c_active_count
         self.a_duration = self.get_last_time() - self._first
 
         export = [
@@ -354,8 +364,8 @@ class Flow:
             # UDP
             # Skip if already labelled valid
             if self._valid: return
-            # Check if a packet has been received from backward direction. One
-            # packet has already been sent in forward direction to initiate.
+            # If packet length is over 8 (size of a UDP header), then we have
+            # at least one byte of data
             if pkt.len > 8:
                 # TODO: Check for 1 packet in each direction
                 self._valid = True
@@ -444,7 +454,7 @@ class Flow:
         if (now < last):
             log.debug("Flow: ignoring reordered packet. %d < %d" %
                       (now, last))
-            raise NotImplementedError
+            #raise NotImplementedError
         # Update the global variable _pdir which holds the direction of the
         # packet currently in question.  
         if (pkt[IP].src == self._first_packet[IP].src):
@@ -455,10 +465,11 @@ class Flow:
         self.update_status(pkt)
         # Set attributes.
         if diff > IDLE_THRESHOLD:
-            # The flow has been idle, so calc idle time stats
+            # The flow has been idle previous to this packet, so calc idle time 
+            # stats
             if diff > self.a_max_idle:
                 self.a_max_idle = diff
-            if diff < self.a_min_idle or self.a_min_idle < 0:
+            if diff < self.a_min_idle or self.a_min_idle == 0:
                 self.a_min_idle = diff
             self.c_idle_time += diff
             self.c_idle_sqsum += (diff ** 2)
@@ -468,7 +479,7 @@ class Flow:
             diff = last - self.c_active_start
             if diff > self.a_max_active:
                 self.a_max_active = diff
-            if diff < self.a_min_active or self.a_min_active < 0:
+            if diff < self.a_min_active or self.a_min_active == 0:
                 self.a_min_active = diff
             self.c_active_time += diff
             self.c_active_sqsum += (diff ** 2)

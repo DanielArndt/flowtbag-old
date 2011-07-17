@@ -114,7 +114,7 @@ class Flowtbag:
 
 if __name__ == '__main__':
     log.debug("Flowtbag begin")
-    if len(sys.argv) > 0:
+    if len(sys.argv) > 1:
         Flowtbag(sys.argv[1])
     else:
         Flowtbag()
