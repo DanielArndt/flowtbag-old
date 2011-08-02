@@ -607,10 +607,7 @@ class Flow:
             return 0
     
     def checkidle(self, time):
-        if self.get_last_time() < time - FLOW_TIMEOUT:
-            return True
-        else:
-            return False
+        return True if time - self.get_last_time() > FLOW_TIMEOUT else False
         
     def export(self):
         if self._valid:
