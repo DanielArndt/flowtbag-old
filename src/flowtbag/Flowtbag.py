@@ -30,14 +30,15 @@ from Flow import Flow
 
 #Set up default logging system.
 log = logging.getLogger()
-#log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 ch = logging.StreamHandler()
-#ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s;%(levelname)s:: %(message)s :: %(filename)s:%(lineno)s",
                               "%H:%M:%S")
 ch.setFormatter(formatter)
 log.addHandler(ch)
 
+REPORT_INTERVAL = 10000
 
 def sort_by_IP(t):
     '''
@@ -54,6 +55,7 @@ class Flowtbag:
             self.count = 0
             self.flow_count = 0
             self.active_flows = {}
+            self.start_time_interval = 0.0
             sniff(offline=filename, prn=self.callback, store=0)
             self.exportAll()
         except KeyboardInterrupt:
@@ -67,12 +69,20 @@ class Flowtbag:
 
     def exportAll(self):
         for flow in self.active_flows.values():
-            print "%s" % (flow)
+            flow.export()
 
     def create_flow(self, pkt, flow_tuple):
         self.flow_count += 1
         flow = Flow(pkt, self.flow_count)
         self.active_flows[flow_tuple] = flow
+
+    def cleanup_active(self, time):
+        for flow_tuple in self.active_flows.keys():
+            flow = self.active_flows[flow_tuple]
+            if flow.checkidle(time):
+                flow.export()
+                del self.active_flows[flow_tuple]
+                
 
     def callback(self, pkt):
         '''
@@ -84,6 +94,15 @@ class Flowtbag:
             pkt: The packet to be processed
         '''
         self.count += 1
+        if self.count % REPORT_INTERVAL == 0:
+            self.end_time_interval = time.clock()
+            self.elapsed = self.end_time_interval - self.start_time_interval
+            log.info("Processed %d packets." % self.count)
+            log.info("Took %f s to process %d packets" % (self.elapsed,
+                                                          REPORT_INTERVAL))
+            log.info("Current size of the flowtbag: %d" % len(self.active_flows))
+            self.start_time_interval = self.end_time_interval
+            self.cleanup_active(pkt.time)
         if IP not in pkt or pkt.proto not in (6, 19):
             # Ignore non-IP packets or packets that aren't TCP or UDP
             log.debug("Ignoring non-IP/TCP/UDP packet %d" % (self.count))
@@ -106,13 +125,13 @@ class Flowtbag:
             return_val = flow.add(pkt)
             if return_val == 1:
                 #This packet ended the TCP connection. Export it.
-                print "%s" % (flow)
+                flow.export()
                 del self.active_flows[flow_tuple]
             elif return_val == 2:
                 # This packet has been added to the wrong flow. This means the 
                 # previous flow has ended. We export the old flow, remove it,
                 # and create a new flow.
-                print "%s" % (flow)
+                flow.export()
                 del self.active_flows[flow_tuple]
                 self.create_flow(pkt, flow_tuple)
 
@@ -127,9 +146,15 @@ if __name__ == '__main__':
                             action='store_true',
                             default=False,
                             help='display debugging information')
+    arg_parser.add_argument('-r',
+                            dest='report',
+                            type=int,
+                            default=10000,
+                            help='interval (num pkts) which stats be reported')
     args = arg_parser.parse_args()
-    print args
     log.debug("Flowtbag begin")
+    if args.report:
+        REPORT_INTERVAL = args.report
     if args.debug:
         log.setLevel(logging.DEBUG)
         ch.setLevel(logging.DEBUG)

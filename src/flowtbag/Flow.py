@@ -215,7 +215,7 @@ class Flow:
             else:
                 self.a_furg_cnt = 0
             self.a_burg_cnt = 0
-        self.a_total_fhlen, _, _ = self.get_header_lengths(pkt)
+        self.a_total_fhlen = self.get_header_lengths(pkt)
         self.a_total_bhlen = 0
         self.update_status(pkt)
 
@@ -408,12 +408,13 @@ class Flow:
             # If packet length is over 8 (size of a UDP header), then we have
             # at least one byte of data
             if pkt.len > 8:
-                # TODO: Check for 1 packet in each direction
+                self.has_data = True
+            if self.has_data and self.a_total_bpackets > 0:
                 self._valid = True
         elif pkt.proto == 6:
             # TCP
             if isinstance(self._cstate, TCP_ESTABLISHED):
-                hlen, _, _ = self.get_header_lengths(pkt)
+                hlen = self.get_header_lengths(pkt)
                 if pkt.len > hlen:
                     #TODO: Why would we need a hasdata variable such as in NM?
                     self._valid = True
@@ -465,7 +466,7 @@ class Flow:
             protohlen = pkt[TCP].dataofs * 32 / 8 # TCPHL * 32 bit word / 8 bits per byte
         # hlen - Total header length
         hlen = iphlen + protohlen
-        return hlen, protohlen, iphlen
+        return hlen
 
     def add(self, pkt):
         '''
@@ -489,11 +490,11 @@ class Flow:
 
         #Gather some statistics
         len = pkt.len
-        hlen, _, _ = self.get_header_lengths(pkt)
+        hlen = self.get_header_lengths(pkt)
         assert (now >= self._first)
         # Ignore re-ordered packets
         if (now < last):
-            log.debug("Flow: ignoring reordered packet. %d < %d" %
+            log.info("Flow: ignoring reordered packet. %d < %d" %
                       (now, last))
             #raise NotImplementedError
         # Update the global variable _pdir which holds the direction of the
@@ -502,8 +503,6 @@ class Flow:
             self._pdir = "f"
         else:
             self._pdir = "b"
-        # Update the status (validity, TCP connection state) of the flow.
-        self.update_status(pkt)
         # Set attributes.
         if diff > IDLE_THRESHOLD:
             # The flow has been idle previous to this packet, so calc idle time 
@@ -596,10 +595,24 @@ class Flow:
                     self.burg_cnt += 1
             # Update the last backward packet time stamp
             self._blast = now
+
+        # Update the status (validity, TCP connection state) of the flow.
+        self.update_status(pkt)            
+
         if (pkt.proto == 6 and
             isinstance(self._cstate, TCP_CLOSED) and
             isinstance(self._sstate, TCP_CLOSED)):
             return 1
         else:
             return 0
+    
+    def checkidle(self, time):
+        if self.get_last_time() + 600 > time:
+            return True
+        else:
+            return False
+        
+    def export(self):
+        if self._valid:
+            print self
 #--------------------------------------------------------------------- End: Flow
