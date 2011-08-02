@@ -21,14 +21,18 @@
 '''
 
 import sys
+import argparse
+import logging
+
+logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 from scapy.all import *
 from Flow import Flow
 
 #Set up default logging system.
 log = logging.getLogger()
-log.setLevel(logging.DEBUG)
+#log.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+#ch.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s;%(levelname)s:: %(message)s :: %(filename)s:%(lineno)s",
                               "%H:%M:%S")
 ch.setFormatter(formatter)
@@ -113,9 +117,21 @@ class Flowtbag:
                 self.create_flow(pkt, flow_tuple)
 
 if __name__ == '__main__':
+    arg_parser = argparse.ArgumentParser(description='Converts a network capture '\
+        'file into a comma seperated value list of integers representing ' \
+        'a list of flow statistics.')
+    arg_parser.add_argument('capture_file',
+                            help='The capture file to be converted')
+    arg_parser.add_argument('--debug',
+                            dest='debug',
+                            action='store_true',
+                            default=False,
+                            help='display debugging information')
+    args = arg_parser.parse_args()
+    print args
     log.debug("Flowtbag begin")
-    if len(sys.argv) > 1:
-        Flowtbag(sys.argv[1])
-    else:
-        Flowtbag()
+    if args.debug:
+        log.setLevel(logging.DEBUG)
+        ch.setLevel(logging.DEBUG)
+    Flowtbag(args.capture_file)
     log.debug("Flowtbag end")
