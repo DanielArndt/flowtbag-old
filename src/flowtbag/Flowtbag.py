@@ -105,9 +105,7 @@ class Flowtbag:
             self.cleanup_active(pkt.time)
         if IP not in pkt or pkt.proto not in (6, 19):
             # Ignore non-IP packets or packets that aren't TCP or UDP
-            log.debug("Ignoring non-IP/TCP/UDP packet %d" % (self.count))
             return
-        log.debug("Processing packet %d" % (self.count))
         srcip = pkt[IP].src
         srcport = pkt.sport
         dstip = pkt[IP].dst
@@ -123,7 +121,9 @@ class Flowtbag:
             # A flow of this tuple already exists, add to it.
             flow = self.active_flows[flow_tuple]
             return_val = flow.add(pkt)
-            if return_val == 1:
+            if return_val == 0:
+                return
+            elif return_val == 1:
                 #This packet ended the TCP connection. Export it.
                 flow.export()
                 del self.active_flows[flow_tuple]

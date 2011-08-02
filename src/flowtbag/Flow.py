@@ -496,6 +496,7 @@ class Flow:
         if (now < last):
             log.info("Flow: ignoring reordered packet. %d < %d" %
                       (now, last))
+            return 0
             #raise NotImplementedError
         # Update the global variable _pdir which holds the direction of the
         # packet currently in question.  
