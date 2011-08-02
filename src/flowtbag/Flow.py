@@ -237,47 +237,87 @@ class Flow:
         self.c_active_sqsum += (diff ** 2)
         self.c_active_count += 1
 
+        assert(self.a_total_fpackets > 0)
         self.a_mean_fpktl = self.a_total_fvolume / self.a_total_fpackets
-        self.a_std_fpktl = stddev(self.c_fpktl_sqsum,
-                                  self.a_total_fvolume,
-                                  self.a_total_fpackets) \
-            if self.a_total_fpackets > 1 else (0)
-        self.a_mean_bpktl = self.a_total_bvolume / self.a_total_bpackets \
-            if self.a_total_bpackets > 0 else (-1)
-        self.a_std_bpktl = stddev(self.c_bpktl_sqsum,
-                                  self.a_total_bvolume,
-                                  self.a_total_bpackets) \
-            if self.a_total_bpackets > 1 else (0)
-        self.a_mean_fiat = self.c_fiat_sum / self.c_fiat_count \
-            if self.c_fiat_count > 0 else (0)
-        self.a_std_fiat = stddev(self.c_fiat_sqsum,
-                                 self.c_fiat_sum,
-                                 self.c_fiat_count) \
-            if self.c_fiat_count > 1 else (0)
-        self.a_mean_biat = self.c_biat_sum / self.c_biat_count \
-            if self.c_biat_count > 0 else (0)
-        self.a_std_biat = stddev(self.c_biat_sqsum,
-                                 self.c_biat_sum,
-                                 self.c_biat_count) \
-            if self.c_biat_count > 1 else (0)
-        self.a_mean_active = self.c_active_time / self.c_active_count \
-            if self.c_active_count > 0 else log.debug("ERR: This shouldn't happen")
-        self.a_std_active = stddev(self.c_active_sqsum,
-                                   self.c_active_time,
-                                   self.c_active_count) \
-            if self.c_active_count > 1 else (0)
-        self.a_mean_idle = self.c_idle_time / self.c_idle_count \
-            if self.c_idle_count > 0 else (0)
-        self.a_std_idle = stddev(self.c_idle_sqsum,
-                                 self.c_idle_time,
-                                 self.c_idle_count) \
-            if self.c_idle_count > 1 else (0)
+        # Standard deviation of packets in the forward direction
+        if self.a_total_fpackets > 1:
+            self.a_std_fpktl = stddev(self.c_fpktl_sqsum,
+                                      self.a_total_fvolume,
+                                      self.a_total_fpackets)
+        else:
+            self.a_std_fpktl = 0
+        # Mean packet length of packets in the packward direction
+        if self.a_total_bpackets > 0:
+            self.a_mean_bpktl = self.a_total_bvolume / self.a_total_bpackets
+        else:
+            self.a_mean_bpktl = -1
+        # Standard deviation of packets in the backward direction
+        if self.a_total_bpackets > 1:
+            self.a_std_bpktl = stddev(self.c_bpktl_sqsum,
+                                      self.a_total_bvolume,
+                                      self.a_total_bpackets)
+        else:
+            self.a_std_bpktl = 0
+        # Mean forward inter-arrival time
+        # TODO: Check if we actually need c_fiat_count ?
+        if self.c_fiat_count > 0:
+            self.a_mean_fiat = self.c_fiat_sum / self.c_fiat_count
+        else:
+            self.a_mean_fiat = 0
+        # Standard deviation of forward inter-arrival times
+        if self.c_fiat_count > 1:
+            self.a_std_fiat = stddev(self.c_fiat_sqsum,
+                                     self.c_fiat_sum,
+                                     self.c_fiat_count)
+        else:
+            self.a_std_fiat = 0
+        # Mean backward inter-arrival time
+        if self.c_biat_count > 0:
+            self.a_mean_biat = self.c_biat_sum / self.c_biat_count
+        else:
+            self.a_mean_biat = 0
+        # Standard deviation of backward inter-arrival times
+        if self.c_biat_count > 1:
+            self.a_std_biat = stddev(self.c_biat_sqsum,
+                                     self.c_biat_sum,
+                                     self.c_biat_count)
+        else:
+            self.a_std_biat = 0
+        # Mean active time of the sub-flows
+        if self.c_active_count > 0:
+            self.a_mean_active = self.c_active_time / self.c_active_count
+        else:
+            # There should be packets in each direction if we're exporting 
+            log.debug("ERR: This shouldn't happen")
+            raise Exception
+        # Standard deviation of active times of sub-flows
+        if self.c_active_count > 1:
+            self.a_std_active = stddev(self.c_active_sqsum,
+                                       self.c_active_time,
+                                       self.c_active_count)
+        else:
+            self.a_std_active = 0
+        # Mean of idle times between sub-flows
+        if self.c_idle_count > 0:
+            self.a_mean_idle = self.c_idle_time / self.c_idle_count
+        else:
+            self.a_mean_idle = 0
+        # Standard deviation of idle times between sub-flows
+        if self.c_idle_count > 1:
+            self.a_std_idle = stddev(self.c_idle_sqsum,
+                                     self.c_idle_time,
+                                     self.c_idle_count)
+        else:
+            self.a_std_idle = 0
+        # More sub-flow calculations
         if self.c_active_count > 0:
             self.a_sflow_fpackets = self.a_total_fpackets / self.c_active_count
             self.a_sflow_fbytes = self.a_total_fvolume / self.c_active_count
             self.a_sflow_bpackets = self.a_total_bpackets / self.c_active_count
             self.a_sflow_bbytes = self.a_total_bvolume / self.c_active_count
         self.a_duration = self.get_last_time() - self._first
+
+        assert (self.a_duration > 0)
 
         export = [
                   self.a_srcip,
