@@ -607,7 +607,7 @@ class Flow:
             return 0
     
     def checkidle(self, time):
-        if self.get_last_time() + 600 > time:
+        if self.get_last_time() < time - FLOW_TIMEOUT:
             return True
         else:
             return False
