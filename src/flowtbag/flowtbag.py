@@ -129,10 +129,12 @@ class Flowtbag:
         if self.count % REPORT_INTERVAL == 0:
             self.end_time_interval = time.clock()
             self.elapsed = self.end_time_interval - self.start_time_interval
-            log.info("Processed %d packets. Timestamp %f" % (self.count, ts))
-            log.info("Took %f s to process %d packets" % (self.elapsed,
-                                                          REPORT_INTERVAL))
-            log.info("Current size of the flowtbag: %d" % len(self.active_flows))
+            log.info("Processed %d packets. Timestamp %f" % 
+                     (self.count, ts))
+            log.info("Took %f s to process %d packets" % 
+                     (self.elapsed, REPORT_INTERVAL))
+            log.info("Current size of the flowtbag: %d" % 
+                     len(self.active_flows))
             self.start_time_interval = self.end_time_interval
             #self.cleanup_active(pkt.time)
         #log.debug("IP field: %s" % ba.hexlify(data[12:14]))
