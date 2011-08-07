@@ -95,17 +95,20 @@ class Flowtbag:
 
     def decode_IP_layer(self, data, pkt):
         pkt['version'] = (ord(data[0]) & 0xf0) >> 4
-        pkt['header_len'] = ord(data[0]) & 0x0f 
+        pkt['iphlen'] = ord(data[0]) & 0x0f 
         pkt['dscp'] = ord(data[1]) >> 2
-        pkt['total_len'] = socket.ntohs(struct.unpack('H',data[2:4])[0])
+        pkt['len'] = socket.ntohs(struct.unpack('H',data[2:4])[0])
         pkt['protocol'] = ord(data[9])
-        pkt['source_address'] = pcap.ntoa(struct.unpack('i',data[12:16])[0])
-        pkt['destination_address'] = pcap.ntoa(struct.unpack('i',data[16:20])[0])
-        if pkt['header_len']>5:
-            pkt['options'] = data[20:4*(pkt['header_len']-5)]
+        pkt['srcip'] = pcap.ntoa(struct.unpack('i',data[12:16])[0])
+        pkt['dstip'] = pcap.ntoa(struct.unpack('i',data[16:20])[0])
+        if pkt['iphlen']>5:
+            pkt['options'] = data[20:4*(pkt['iphlen']-5)]
         else:
             pkt['options'] = None
-        pkt['data'] = data[4*pkt['header_len']:]
+        pkt['data'] = data[4*pkt['iphlen']:]
+
+    def decode_TCP_layer(self, data, pkt):
+        log.debug(data)
 
     def callback(self, pktlen, data, ts):
         '''
@@ -145,10 +148,8 @@ class Flowtbag:
         if pkt['protocol'] not in (6,19):
             log.debug('Ignoring non-TCP/UDP packet')
             return
+        self.decode_TCP_layer(pkt['data'], pkt)
             
-        # if IP not in pkt or pkt.proto not in (6, 19):
-        #     # Ignore non-IP packets or packets that aren't TCP or UDP
-        #     return
         # srcip = pkt[IP].src
         # srcport = pkt.sport
         # dstip = pkt[IP].dst
