@@ -23,17 +23,22 @@
 import sys
 import argparse
 import logging
+import time
+import binascii as ba
+import socket
+import struct
 
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
-from scapy.all import *
-from Flow import Flow
+import pcap
+from flow import Flow
 
 #Set up default logging system.
 log = logging.getLogger()
 log.setLevel(logging.INFO)
 ch = logging.StreamHandler()
 ch.setLevel(logging.INFO)
-formatter = logging.Formatter("%(asctime)s;%(levelname)s:: %(message)s :: %(filename)s:%(lineno)s",
+formatter = logging.Formatter("%(asctime)s;%(levelname)s:: "
+                              "%(message)s :: %(filename)s:%(lineno)s",
                               "%H:%M:%S")
 ch.setFormatter(formatter)
 log.addHandler(ch)
@@ -56,9 +61,14 @@ class Flowtbag:
             self.flow_count = 0
             self.active_flows = {}
             self.start_time_interval = 0.0
-            sniff(offline=filename, prn=self.callback, store=0)
+            # Set up pylibpcap
+            pcap_reader = pcap.pcapObject()
+            pcap_reader.open_offline(filename)
+#            pcap_reader.setfilter('(tcp or udp)', 0, 0)
+            pcap_reader.loop(-1,self.callback)
             self.exportAll()
         except KeyboardInterrupt:
+            self.exportAll()
             exit(0)
 
     def __repr__(self):
@@ -82,58 +92,91 @@ class Flowtbag:
             if flow.checkidle(time):
                 flow.export()
                 del self.active_flows[flow_tuple]
-                
 
-    def callback(self, pkt):
+    def decode_IP_layer(self, data, pkt):
+        pkt['version'] = (ord(data[0]) & 0xf0) >> 4
+        pkt['header_len'] = ord(data[0]) & 0x0f 
+        pkt['dscp'] = ord(data[1]) >> 2
+        pkt['total_len'] = socket.ntohs(struct.unpack('H',data[2:4])[0])
+        pkt['protocol'] = ord(data[9])
+        pkt['source_address'] = pcap.ntoa(struct.unpack('i',data[12:16])[0])
+        pkt['destination_address'] = pcap.ntoa(struct.unpack('i',data[16:20])[0])
+        if pkt['header_len']>5:
+            pkt['options'] = data[20:4*(pkt['header_len']-5)]
+        else:
+            pkt['options'] = None
+        pkt['data'] = data[4*pkt['header_len']:]
+
+    def callback(self, pktlen, data, ts):
         '''
         The callback function to be used to process each packet
         
-        This function is applied to each individual packet in the capture.
+        This function is applied to each individual packet in the capture via a 
+        loop function in the construction of the Flowtbag.
         
         Args:
-            pkt: The packet to be processed
+            pktlen -- The length of the packet
+            data -- The packet payload
+            ts -- The timestamp of the packet
         '''
+        if not data:
+            # I don't know when this happens, so I wanna know.
+            raise Exception
         self.count += 1
         if self.count % REPORT_INTERVAL == 0:
             self.end_time_interval = time.clock()
             self.elapsed = self.end_time_interval - self.start_time_interval
-            log.info("Processed %d packets." % self.count)
+            log.info("Processed %d packets. Timestamp %f" % (self.count, ts))
             log.info("Took %f s to process %d packets" % (self.elapsed,
                                                           REPORT_INTERVAL))
             log.info("Current size of the flowtbag: %d" % len(self.active_flows))
             self.start_time_interval = self.end_time_interval
-            self.cleanup_active(pkt.time)
-        if IP not in pkt or pkt.proto not in (6, 19):
-            # Ignore non-IP packets or packets that aren't TCP or UDP
+            #self.cleanup_active(pkt.time)
+        #log.debug("IP field: %s" % ba.hexlify(data[12:14]))
+        pkt={}
+        # Check if the packet is an IP packet
+        if not data[12:14] == '\x08\x00':
+            log.debug('Ignoring non-IP packet')
             return
-        srcip = pkt[IP].src
-        srcport = pkt.sport
-        dstip = pkt[IP].dst
-        dstport = pkt.dport
-        proto = pkt.proto
-        flow_tuple = (srcip, srcport, dstip, dstport, proto)
-        flow_tuple = sort_by_IP(flow_tuple)
-        # Find if a flow already exists for this tuple
-        if flow_tuple not in self.active_flows:
-            # The a flow of this tuple does not exists yet, create it.
-            self.create_flow(pkt, flow_tuple)
-        else:
-            # A flow of this tuple already exists, add to it.
-            flow = self.active_flows[flow_tuple]
-            return_val = flow.add(pkt)
-            if return_val == 0:
-                return
-            elif return_val == 1:
-                #This packet ended the TCP connection. Export it.
-                flow.export()
-                del self.active_flows[flow_tuple]
-            elif return_val == 2:
-                # This packet has been added to the wrong flow. This means the 
-                # previous flow has ended. We export the old flow, remove it,
-                # and create a new flow.
-                flow.export()
-                del self.active_flows[flow_tuple]
-                self.create_flow(pkt, flow_tuple)
+        self.decode_IP_layer(data[14:], pkt)
+        if pkt['version'] != 4:
+            log.debug('Ignoring non-IPv4 packet')
+            return
+        if pkt['protocol'] not in (6,19):
+            log.debug('Ignoring non-TCP/UDP packet')
+            return
+            
+        # if IP not in pkt or pkt.proto not in (6, 19):
+        #     # Ignore non-IP packets or packets that aren't TCP or UDP
+        #     return
+        # srcip = pkt[IP].src
+        # srcport = pkt.sport
+        # dstip = pkt[IP].dst
+        # dstport = pkt.dport
+        # proto = pkt.proto
+        # flow_tuple = (srcip, srcport, dstip, dstport, proto)
+        # flow_tuple = sort_by_IP(flow_tuple)
+        # # Find if a flow already exists for this tuple
+        # if flow_tuple not in self.active_flows:
+        #     # The a flow of this tuple does not exists yet, create it.
+        #     self.create_flow(pkt, flow_tuple)
+        # else:
+        #     # A flow of this tuple already exists, add to it.
+        #     flow = self.active_flows[flow_tuple]
+        #     return_val = flow.add(pkt)
+        #     if return_val == 0:
+        #         return
+        #     elif return_val == 1:
+        #         #This packet ended the TCP connection. Export it.
+        #         flow.export()
+        #         del self.active_flows[flow_tuple]
+        #     elif return_val == 2:
+        #         # This packet has been added to the wrong flow. This means the 
+        #         # previous flow has ended. We export the old flow, remove it,
+        #         # and create a new flow.
+        #         flow.export()
+        #         del self.active_flows[flow_tuple]
+        #         self.create_flow(pkt, flow_tuple)
 
 if __name__ == '__main__':
     arg_parser = argparse.ArgumentParser(description='Converts a network capture '\
