@@ -95,28 +95,24 @@ class Flowtbag:
 
     def decode_IP_layer(self, data, pkt):
         pkt['version'] = (ord(data[0]) & 0xf0) >> 4
-        pkt['iphlen'] = ord(data[0]) & 0x0f 
-        pkt['dscp'] = ord(data[1]) >> 2
-        pkt['len'] = socket.ntohs(struct.unpack('H',data[2:4])[0])
-        pkt['proto'] = ord(data[9])
-        pkt['srcip'] = pcap.ntoa(struct.unpack('i',data[12:16])[0])
-        pkt['dstip'] = pcap.ntoa(struct.unpack('i',data[16:20])[0])
-        if pkt['iphlen']>5:
-            pkt['options'] = data[20:4*(pkt['iphlen']-5)]
-        else:
-            pkt['options'] = None
-        pkt['data'] = data[4*pkt['iphlen']:]
+        pkt['iphlen']  = (ord(data[0]) & 0x0f) * 4
+        pkt['dscp']    = ord(data[1]) >> 2
+        pkt['len']     = socket.ntohs(struct.unpack('H',data[2:4])[0])
+        pkt['proto']   = ord(data[9])
+        pkt['srcip']   = pcap.ntoa(struct.unpack('i',data[12:16])[0])
+        pkt['dstip']   = pcap.ntoa(struct.unpack('i',data[16:20])[0])
+        pkt['data']    = data[pkt['iphlen']:]
 
     def decode_TCP_layer(self, data, pkt):
         pkt['srcport'] = socket.ntohs(struct.unpack('H', data[0:2])[0])
         pkt['dstport'] = socket.ntohs(struct.unpack('H', data[2:4])[0])
-        pkt['prhlen'] = ((ord(data[12]) & 0xf0) >> 4) * 4
-        pkt['control'] = ord(data[13]) & 0x3f
+        pkt['prhlen']  = ((ord(data[12]) & 0xf0) >> 4) * 4
+        pkt['flags'] = ord(data[13]) & 0x3f
 
     def decode_UDP_layer(self, data, pkt):
         pkt['srcport'] = socket.ntohs(struct.unpack('H', data[0:2])[0])
         pkt['dstport'] = socket.ntohs(struct.unpack('H', data[2:4])[0])
-        pkt['prhlen'] = socket.ntohs(struct.unpack('H', data[4:6])[0])
+        pkt['prhlen']  = socket.ntohs(struct.unpack('H', data[4:6])[0])
 
     def callback(self, pktlen, data, ts):
         '''
@@ -163,36 +159,39 @@ class Flowtbag:
         else:
             log.debug('Ignoring non-TCP/UDP packet')
             return
-        log.debug("type: %d prhlen: %d" % (pkt['proto'], pkt['prhlen']))
+        # We're really going ahead with this packet! Let's get 'er done.
+        pkt['time'] = ts
+
+        log.debug("type: %d prhlen: %d len: %d" % 
+                  (pkt['proto'], pkt['prhlen'], pkt['len']))
         
-        # srcip = pkt[IP].src
-        # srcport = pkt.sport
-        # dstip = pkt[IP].dst
-        # dstport = pkt.dport
-        # proto = pkt.proto
-        # flow_tuple = (srcip, srcport, dstip, dstport, proto)
-        # flow_tuple = sort_by_IP(flow_tuple)
-        # # Find if a flow already exists for this tuple
-        # if flow_tuple not in self.active_flows:
-        #     # The a flow of this tuple does not exists yet, create it.
-        #     self.create_flow(pkt, flow_tuple)
-        # else:
-        #     # A flow of this tuple already exists, add to it.
-        #     flow = self.active_flows[flow_tuple]
-        #     return_val = flow.add(pkt)
-        #     if return_val == 0:
-        #         return
-        #     elif return_val == 1:
-        #         #This packet ended the TCP connection. Export it.
-        #         flow.export()
-        #         del self.active_flows[flow_tuple]
-        #     elif return_val == 2:
-        #         # This packet has been added to the wrong flow. This means the 
-        #         # previous flow has ended. We export the old flow, remove it,
-        #         # and create a new flow.
-        #         flow.export()
-        #         del self.active_flows[flow_tuple]
-        #         self.create_flow(pkt, flow_tuple)
+        flow_tuple = (pkt['srcip'],
+                      pkt['srcport'], 
+                      pkt['dstip'], 
+                      pkt['dstport'], 
+                      pkt['proto'])
+        flow_tuple = sort_by_IP(flow_tuple)
+        # Find if a flow already exists for this tuple
+        if flow_tuple not in self.active_flows:
+            # The a flow of this tuple does not exists yet, create it.
+            self.create_flow(pkt, flow_tuple)
+        else:
+            # A flow of this tuple already exists, add to it.
+            flow = self.active_flows[flow_tuple]
+            return_val = flow.add(pkt)
+            if return_val == 0:
+                return
+            elif return_val == 1:
+                #This packet ended the TCP connection. Export it.
+                flow.export()
+                del self.active_flows[flow_tuple]
+            elif return_val == 2:
+                # This packet has been added to the wrong flow. This means the
+                # previous flow has ended. We export the old flow, remove it,
+                # and create a new flow.
+                flow.export()
+                del self.active_flows[flow_tuple]
+                self.create_flow(pkt, flow_tuple)
 
 if __name__ == '__main__':
     arg_parser = argparse.ArgumentParser(description='Converts a network capture '\

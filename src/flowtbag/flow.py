@@ -29,28 +29,38 @@ log = logging.getLogger()
 FLOW_TIMEOUT = 600 # Flow timeout in seconds 
 IDLE_THRESHOLD = 1.0
 #----------------------------------------------------------------- End: Settings
+#------------------------------------------------------------- Non-Configurables
+TCP_FIN = 0x01
+TCP_SYN = 0x02
+TCP_RST = 0x04
+TCP_PSH = 0x08
+TCP_ACK = 0x10
+TCP_URG = 0x20
+#-------------------------------------------------------- End: Non-Configurables
+
 
 def stddev(sqsum, sum, count):
     return math.sqrt((sqsum - (sum ** 2 / count)) / (count - 1))
 
-def tcp_set(flags, find):
+def tcp_set(find, flags):
     '''
     Checks if a flag is set or not.
     
     Args:
-        flags - The string encoded set of flags
         find - The flag to find
+        flags - The string encoded set of flags
     Returns:
         True - if the /find/ flag is set
         False - otherwise
     '''
-    return True if flags.find(find) >= 0 else False
+    log.debug("find: %s flags: %s" % (type(find), flags))
+    return ((find & flags) == find)
 
 #==============================================================================#
 # TCP connection states. These define the finite state machine used for        #
 # verifying TCP flow validity.                                                 #
 #==============================================================================#
-class TCP_STATE(object):
+class STATE_TCP(object):
     ''' 
     Superclass for a TCP connection state machine.  
     
@@ -69,10 +79,10 @@ class TCP_STATE(object):
         If no transition is found, then the function returns itself. 
         
         '''
-        if tcp_set(flags, "R"):
-            return TCP_CLOSED()
-        if tcp_set(flags, "F") and dir == _pdir:
-            return TCP_FIN()
+        if tcp_set(flags, TCP_RST):
+            return STATE_TCP_CLOSED()
+        if tcp_set(flags, TCP_FIN) and dir == _pdir:
+            return STATE_TCP_FIN()
         # Add all states satisfied by the function in the map /tr/ given /flags/
         next_state = [ s for f, s in self.tr if f(flags, dir, _pdir)]
         try:
@@ -83,25 +93,31 @@ class TCP_STATE(object):
     def __str__(self):
         return self.__class__.__name__
 
-class TCP_START(TCP_STATE):
-    tr = [(lambda flags, dir, pdir: tcp_set(flags, "S") and dir == pdir, "TCP_SYN")]
+class STATE_TCP_START(STATE_TCP):
+    tr = [(lambda flags, dir, pdir: 
+           tcp_set(flags, TCP_SYN) and dir == pdir, 
+           "STATE_TCP_SYN")]
 
-class TCP_SYN(TCP_STATE):
-    tr = [(lambda flags, dir, pdir: tcp_set(flags, "S") and
-           tcp_set(flags, "A") and dir != pdir, "TCP_SYNACK")]
+class STATE_TCP_SYN(STATE_TCP):
+    tr = [(lambda flags, dir, pdir: 
+           tcp_set(flags, TCP_SYN) and
+           tcp_set(flags, TCP_ACK) and dir != pdir, 
+           "STATE_TCP_SYNACK")]
 
-class TCP_SYNACK(TCP_STATE):
-    tr = [(lambda flags, dir, pdir: tcp_set(flags, "A") and
-           dir == pdir, "TCP_ESTABLISHED")]
+class STATE_TCP_SYNACK(STATE_TCP):
+    tr = [(lambda flags, dir, pdir: 
+           tcp_set(flags, TCP_ACK) and dir == pdir, 
+           "STATE_TCP_ESTABLISHED")]
 
-class TCP_ESTABLISHED(TCP_STATE):
+class STATE_TCP_ESTABLISHED(STATE_TCP):
     tr = []
 
-class TCP_FIN(TCP_STATE):
-    tr = [(lambda flags, dir, pdir: tcp_set(flags, "A") and
-           dir != pdir, "TCP_CLOSED")]
+class STATE_TCP_FIN(STATE_TCP):
+    tr = [(lambda flags, dir, pdir: 
+           tcp_set(flags, TCP_ACK) and dir != pdir, 
+           "STATE_TCP_CLOSED")]
 
-class TCP_CLOSED(TCP_STATE):
+class STATE_TCP_CLOSED(STATE_TCP):
     tr = []
 #-------------------------------------------------------- End: TCP state machine
 
@@ -138,27 +154,27 @@ class Flow:
         self._first_packet = pkt
         self._valid = False
         self._pdir = "f"
-        self._first = pkt.time
-        self._flast = pkt.time
+        self._first = pkt['time']
+        self._flast = pkt['time']
         self._blast = 0
         #------------------------------------ Basic flow identification criteria
-        self.a_srcip = pkt[IP].src
-        self.a_srcport = pkt.sport
-        self.a_dstip = pkt[IP].dst
-        self.a_dstport = pkt.dport
-        self.a_proto = pkt.proto
-        self.dscp = pkt[IP].tos >> 2 # Bit shift twice to the right to get DSCP
+        self.a_srcip = pkt['srcip']
+        self.a_srcport = pkt['srcport']
+        self.a_dstip = pkt['dstip']
+        self.a_dstport = pkt['dstport']
+        self.a_proto = pkt['proto']
+        self.dscp = pkt['dscp'] # Bit shift twice to the right to get DSCP
                                      # TODO: verify this is working correctly.
         #--------------------------------------------------------------------- #
         self.a_total_fpackets = 1
-        self.a_total_fvolume = pkt.len
+        self.a_total_fvolume = pkt['len']
         self.a_total_bpackets = 0
         self.a_total_bvolume = 0
-        self.a_min_fpktl = pkt.len
+        self.a_min_fpktl = pkt['len']
         self.a_mean_fpktl = 0
-        self.a_max_fpktl = pkt.len
+        self.a_max_fpktl = pkt['len']
         self.a_std_fpktl = 0
-        self.c_fpktl_sqsum = (pkt.len ** 2)
+        self.c_fpktl_sqsum = (pkt['len'] ** 2)
         self.a_min_bpktl = 0
         self.a_mean_bpktl = 0
         self.a_max_bpktl = 0
@@ -198,24 +214,29 @@ class Flow:
         self.a_sflow_fbytes = 0
         self.a_sflow_bpackets = 0
         self.a_sflow_bbytes = 0
-        if pkt.proto == 6:
+        if pkt['proto'] == 6:
             # TCP specific
             # Create state machines for the client and server 
-            self._cstate = TCP_START() # Client state
-            self._sstate = TCP_START() # Server state
+            self._cstate = STATE_TCP_START() # Client state
+            self._sstate = STATE_TCP_START() # Server state
             # Set TCP flag stats
-            flags = pkt.sprintf("%TCP.flags%")
-            if (tcp_set(flags, "P")):
+            if (tcp_set(pkt['flags'], TCP_PSH)):
                 self.a_fpsh_cnt = 1
             else:
                 self.a_fpsh_cnt = 0
-            self.a_bpsh_cnt = 0
-            if (tcp_set(flags, "U")):
+            if (tcp_set(pkt['flags'], TCP_URG)):
                 self.a_furg_cnt = 1
             else:
                 self.a_furg_cnt = 0
-            self.a_burg_cnt = 0
-        self.a_total_fhlen = self.get_header_lengths(pkt)
+        else:
+            # We still need to set these for UDP so when we access them we do
+            # not get an error.
+            self.a_fpsh_cnt = 0
+            self.a_furg_cnt = 0
+        # Backward counts will always start as zero
+        self.a_bpsh_cnt = 0
+        self.a_burg_cnt = 0
+        self.a_total_fhlen = pkt['iphlen'] + pkt['prhlen']
         self.a_total_bhlen = 0
         self.update_status(pkt)
 
@@ -380,11 +401,10 @@ class Flow:
             pkt - the packet to be analyzed to update the TCP connection state
                   for the flow.
         '''
-        flags = pkt.sprintf("%TCP.flags%")
         # Update client state
-        self._cstate = self._cstate.update(flags, "f", self._pdir)
+        self._cstate = self._cstate.update(pkt['flags'], "f", self._pdir)
         # Update server state
-        self._sstate = self._sstate.update(flags, "b", self._pdir)
+        self._sstate = self._sstate.update(pkt['flags'], "b", self._pdir)
 
     def update_status(self, pkt):
         '''
@@ -401,21 +421,21 @@ class Flow:
         Args:
             pkt - the packet to be analyzed for updating the status of the flow.
         '''
-        if pkt.proto == 19:
+        if pkt['proto'] == 17:
             # UDP
             # Skip if already labelled valid
             if self._valid: return
             # If packet length is over 8 (size of a UDP header), then we have
             # at least one byte of data
-            if pkt.len > 8:
+            if pkt['len'] > 8:
                 self.has_data = True
             if self.has_data and self.a_total_bpackets > 0:
                 self._valid = True
-        elif pkt.proto == 6:
+        elif pkt['proto'] == 6:
             # TCP
-            if isinstance(self._cstate, TCP_ESTABLISHED):
-                hlen = self.get_header_lengths(pkt)
-                if pkt.len > hlen:
+            if isinstance(self._cstate, STATE_TCP_ESTABLISHED):
+                hlen = pkt['iphlen'] + pkt['prlen']
+                if pkt['len'] > hlen:
                     #TODO: Why would we need a hasdata variable such as in NM?
                     self._valid = True
             if not self._valid:
@@ -444,30 +464,6 @@ class Flow:
         else:
             return self._flast if (self._flast > self._blast) else self._blast
 
-    def get_header_lengths(self, pkt):
-        '''
-        Returns the total header length, as well as the protocol specific header
-        and internet protocol header lengths.
-        
-        Args:
-            pkt - The packet for which the header lengths are to be retrieved.
-        
-        Returns:
-            [0] - The total header length.
-            [1] - The protocol specific (TCP or UDP) header length.
-            [2] - The length of the internet protocol header. 
-        '''
-        # iphlen - Length of the IP header
-        iphlen = pkt[IP].ihl * 32 / 8 # ihl field * 32-bits / 8 bits in a byte
-        # protohlen - Length of the protocol specific header.
-        if (pkt.proto == 19):
-            protohlen = 8
-        elif (pkt.proto == 6):
-            protohlen = pkt[TCP].dataofs * 32 / 8 # TCPHL * 32 bit word / 8 bits per byte
-        # hlen - Total header length
-        hlen = iphlen + protohlen
-        return hlen
-
     def add(self, pkt):
         '''
         Add a packet to the current flow.
@@ -482,15 +478,15 @@ class Flow:
             2 - the packet is not part of this flow. (ie. flow timeout exceeded) 
         '''
         # TODO: Robust check of whether or not the packet is part of the flow.
-        now = pkt.time
+        now = pkt['time']
         last = self.get_last_time()
         diff = now - last
         if diff > FLOW_TIMEOUT:
             return 2
 
         #Gather some statistics
-        len = pkt.len
-        hlen = self.get_header_lengths(pkt)
+        len = pkt['len']
+        hlen = pkt['iphlen'] + pkt['prhlen']
         assert (now >= self._first)
         # Ignore re-ordered packets
         if (now < last):
@@ -500,7 +496,7 @@ class Flow:
             #raise NotImplementedError
         # Update the global variable _pdir which holds the direction of the
         # packet currently in question.  
-        if (pkt[IP].src == self._first_packet[IP].src):
+        if (pkt['srcip'] == self._first_packet['srcip']):
             self._pdir = "f"
         else:
             self._pdir = "b"
@@ -551,12 +547,11 @@ class Flow:
                 self.c_fiat_sum += diff
                 self.c_fiat_sqsum += (diff ** 2)
                 self.c_fiat_count += 1
-            if pkt.proto == 6:
+            if pkt['proto'] == 6:
                 # Packet is using TCP protocol
-                flags = pkt.sprintf("%TCP.flags%")
-                if (tcp_set(flags, "P")):
+                if (tcp_set(pkt['flags'], TCP_PSH)):
                     self.a_fpsh_cnt += 1
-                if (tcp_set(flags, "U")):
+                if (tcp_set(pkt['flags'], TCP_URG)):
                     self.a_furg_cnt += 1
             # Update the last forward packet time stamp
             self._flast = now
@@ -566,7 +561,7 @@ class Flow:
             if self._blast == 0 and self.dscp == 0:
                 # Check only first packet in backward dir, and make sure it has
                 # not been set already.
-                self.dscp = pkt[IP].tos >> 2
+                self.dscp = pkt['dscp']
             # Calculate some statistics
             # Packet length
             if len < self.a_min_bpktl or self.a_min_bpktl == 0:
@@ -587,12 +582,11 @@ class Flow:
                 self.c_biat_sum += diff
                 self.c_biat_sqsum += (diff ** 2)
                 self.c_biat_count += 1
-            if pkt.proto == 6:
+            if pkt['proto'] == 6:
                 # Packet is using TCP protocol
-                flags = pkt.sprintf("%TCP.flags%")
-                if (tcp_set(flags, "P")):
+                if (tcp_set(pkt['flags'], TCP_PSH)):
                     self.a_bpsh_cnt += 1
-                if (tcp_set(flags, "U")):
+                if (tcp_set(pkt['flags'], TCP_URG)):
                     self.burg_cnt += 1
             # Update the last backward packet time stamp
             self._blast = now
@@ -600,9 +594,9 @@ class Flow:
         # Update the status (validity, TCP connection state) of the flow.
         self.update_status(pkt)            
 
-        if (pkt.proto == 6 and
-            isinstance(self._cstate, TCP_CLOSED) and
-            isinstance(self._sstate, TCP_CLOSED)):
+        if (pkt['proto'] == 6 and
+            isinstance(self._cstate, STATE_TCP_CLOSED) and
+            isinstance(self._sstate, STATE_TCP_CLOSED)):
             return 1
         else:
             return 0
