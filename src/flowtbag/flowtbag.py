@@ -98,7 +98,7 @@ class Flowtbag:
         pkt['iphlen'] = ord(data[0]) & 0x0f 
         pkt['dscp'] = ord(data[1]) >> 2
         pkt['len'] = socket.ntohs(struct.unpack('H',data[2:4])[0])
-        pkt['protocol'] = ord(data[9])
+        pkt['proto'] = ord(data[9])
         pkt['srcip'] = pcap.ntoa(struct.unpack('i',data[12:16])[0])
         pkt['dstip'] = pcap.ntoa(struct.unpack('i',data[16:20])[0])
         if pkt['iphlen']>5:
@@ -108,7 +108,15 @@ class Flowtbag:
         pkt['data'] = data[4*pkt['iphlen']:]
 
     def decode_TCP_layer(self, data, pkt):
-        log.debug(data)
+        pkt['srcport'] = socket.ntohs(struct.unpack('H', data[0:2])[0])
+        pkt['dstport'] = socket.ntohs(struct.unpack('H', data[2:4])[0])
+        pkt['prhlen'] = ((ord(data[12]) & 0xf0) >> 4) * 4
+        pkt['control'] = ord(data[13]) & 0x3f
+
+    def decode_UDP_layer(self, data, pkt):
+        pkt['srcport'] = socket.ntohs(struct.unpack('H', data[0:2])[0])
+        pkt['dstport'] = socket.ntohs(struct.unpack('H', data[2:4])[0])
+        pkt['prhlen'] = socket.ntohs(struct.unpack('H', data[4:6])[0])
 
     def callback(self, pktlen, data, ts):
         '''
@@ -122,10 +130,11 @@ class Flowtbag:
             data -- The packet payload
             ts -- The timestamp of the packet
         '''
+        self.count += 1
         if not data:
             # I don't know when this happens, so I wanna know.
             raise Exception
-        self.count += 1
+        log.debug("Processing packet %d" % self.count)
         if self.count % REPORT_INTERVAL == 0:
             self.end_time_interval = time.clock()
             self.elapsed = self.end_time_interval - self.start_time_interval
@@ -147,11 +156,15 @@ class Flowtbag:
         if pkt['version'] != 4:
             log.debug('Ignoring non-IPv4 packet')
             return
-        if pkt['protocol'] not in (6,19):
+        if pkt['proto'] == 6:
+            self.decode_TCP_layer(pkt['data'], pkt)
+        elif pkt['proto'] == 17:
+            self.decode_UDP_layer(pkt['data'], pkt)
+        else:
             log.debug('Ignoring non-TCP/UDP packet')
             return
-        self.decode_TCP_layer(pkt['data'], pkt)
-            
+        log.debug("type: %d prhlen: %d" % (pkt['proto'], pkt['prhlen']))
+        
         # srcip = pkt[IP].src
         # srcport = pkt.sport
         # dstip = pkt[IP].dst
