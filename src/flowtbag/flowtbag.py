@@ -43,7 +43,7 @@ formatter = logging.Formatter("%(asctime)s;%(levelname)s:: "
 ch.setFormatter(formatter)
 log.addHandler(ch)
 
-REPORT_INTERVAL = 10000
+REPORT_INTERVAL = 500000
 
 def sort_by_IP(t):
     '''
@@ -87,11 +87,14 @@ class Flowtbag:
         self.active_flows[flow_tuple] = flow
 
     def cleanup_active(self, time):
+        count = 0
         for flow_tuple in self.active_flows.keys():
             flow = self.active_flows[flow_tuple]
             if flow.checkidle(time):
                 flow.export()
                 del self.active_flows[flow_tuple]
+                count += 1
+        log.info("Cleaned up %d idle flows" % count)
 
     def decode_IP_layer(self, data, pkt):
         pkt['version'] = (ord(data[0]) & 0xf0) >> 4
@@ -141,7 +144,7 @@ class Flowtbag:
             log.info("Current size of the flowtbag: %d" % 
                      len(self.active_flows))
             self.start_time_interval = self.end_time_interval
-            #self.cleanup_active(pkt.time)
+            self.cleanup_active(ts)
         #log.debug("IP field: %s" % ba.hexlify(data[12:14]))
         pkt={}
         # Check if the packet is an IP packet
