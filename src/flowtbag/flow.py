@@ -53,7 +53,6 @@ def tcp_set(find, flags):
         True - if the /find/ flag is set
         False - otherwise
     '''
-    log.debug("find: %s flags: %s" % (type(find), flags))
     return ((find & flags) == find)
 
 #==============================================================================#
@@ -606,5 +605,12 @@ class Flow:
         
     def export(self):
         if self._valid:
-            print self
+            try:
+                print self
+            except:
+                log.error("Error printing flow %d which starts with packet %d" %
+                          (self._id, self._first_packet['num']))
+                log.error("First packet: %d Last: %d" % 
+                          (self._first, self.get_last_time()))
+                raise AssertionError
 #--------------------------------------------------------------------- End: Flow

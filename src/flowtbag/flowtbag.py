@@ -27,6 +27,7 @@ import time
 import binascii as ba
 import socket
 import struct
+import string
 
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 import pcap
@@ -43,13 +44,17 @@ formatter = logging.Formatter("%(asctime)s;%(levelname)s:: "
 ch.setFormatter(formatter)
 log.addHandler(ch)
 
-REPORT_INTERVAL = 500000
-
 def sort_by_IP(t):
     '''
     Re-arrange a flow tuple to have lowest IP first, for lookup
     '''
     return (t[2], t[3], t[0], t[1], t[4]) if t[2] < t[0] else t
+
+def dumphex(s):
+    bytes = map(lambda x: '%.2x' % x, map(ord, s))
+    for i in xrange(0,len(bytes)/16):
+        log.debug('    %s' % string.join(bytes[i*16:(i+1)*16],' '))
+    log.debug('    %s' % string.join(bytes[(i+1)*16:],' '))
 
 class Flowtbag:
     '''
@@ -68,7 +73,6 @@ class Flowtbag:
             pcap_reader.loop(-1,self.callback)
             self.exportAll()
         except KeyboardInterrupt:
-            self.exportAll()
             exit(0)
 
     def __repr__(self):
@@ -133,7 +137,6 @@ class Flowtbag:
         if not data:
             # I don't know when this happens, so I wanna know.
             raise Exception
-        log.debug("Processing packet %d" % self.count)
         if self.count % REPORT_INTERVAL == 0:
             self.end_time_interval = time.clock()
             self.elapsed = self.end_time_interval - self.start_time_interval
@@ -149,25 +152,44 @@ class Flowtbag:
         pkt={}
         # Check if the packet is an IP packet
         if not data[12:14] == '\x08\x00':
-            log.debug('Ignoring non-IP packet')
+            #log.debug('Ignoring non-IP packet')
             return
+        pkt['num'] = self.count
+        if len(data) < 34:
+            #Hmm, IP header seems to be too short
+            raise Exception
         self.decode_IP_layer(data[14:], pkt)
         if pkt['version'] != 4:
-            log.debug('Ignoring non-IPv4 packet')
+            #log.debug('Ignoring non-IPv4 packet')
             return
         if pkt['proto'] == 6:
-            self.decode_TCP_layer(pkt['data'], pkt)
+            if len(pkt['data']) < 5:
+                log.info("Ignoring malformed TCP header on packet %d" % 
+                          (pkt['num']))
+                return
+            try:
+                self.decode_TCP_layer(pkt['data'], pkt)
+            except:
+                log.error("Error reading TCP header on packet %d" % 
+                          (pkt['num']))
+                log.error("Size: %d iphlen: %d" % 
+                          (len(data), pkt['iphlen']))
+                dumphex(data)
+                raise Exception
         elif pkt['proto'] == 17:
-            self.decode_UDP_layer(pkt['data'], pkt)
+            try:
+                self.decode_UDP_layer(pkt['data'], pkt)
+            except:
+                log.error("Error reading UDP header on packet %d" % 
+                          (pkt['num']))
+                dumphex(data)
+                raise Exception
         else:
-            log.debug('Ignoring non-TCP/UDP packet')
+            #log.debug('Ignoring non-TCP/UDP packet')
             return
+        del pkt['data']
         # We're really going ahead with this packet! Let's get 'er done.
         pkt['time'] = ts
-
-        log.debug("type: %d prhlen: %d len: %d" % 
-                  (pkt['proto'], pkt['prhlen'], pkt['len']))
-        
         flow_tuple = (pkt['srcip'],
                       pkt['srcport'], 
                       pkt['dstip'], 
@@ -210,14 +232,14 @@ if __name__ == '__main__':
     arg_parser.add_argument('-r',
                             dest='report',
                             type=int,
-                            default=10000,
+                            default=500000,
                             help='interval (num pkts) which stats be reported')
     args = arg_parser.parse_args()
-    log.debug("Flowtbag begin")
     if args.report:
         REPORT_INTERVAL = args.report
     if args.debug:
         log.setLevel(logging.DEBUG)
         ch.setLevel(logging.DEBUG)
+    log.debug("Flowtbag begin")
     Flowtbag(args.capture_file)
     log.debug("Flowtbag end")
