@@ -28,8 +28,6 @@ import binascii as ba
 import socket
 import struct
 import string
-
-logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 import pcap
 from flow import Flow
 

@@ -20,8 +20,9 @@
    @author: Daniel Arndt <danielarndt@gmail.com>
 '''
 import logging
-logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
-from scapy.all import *
+import math
+import sys, traceback
+
 # Retrieve the default logger, should have been initialized by the Flowtbag.
 log = logging.getLogger()
 
@@ -142,12 +143,16 @@ class Flow:
              
         c_ - Counter variables, used for counting totals and other statistics to
              help in calculating attributes. 
+
+        d_ - Variables used for debugging output.
     
     '''
     def __init__(self, pkt, id):
         '''
         Constructor. Initialize all values.
         '''
+        if log.isEnabledFor(logging.DEBUG):
+            self.d_packets = [pkt['num']]
         # Set initial values
         self._id = id
         self._first_packet = pkt
@@ -162,8 +167,7 @@ class Flow:
         self.a_dstip = pkt['dstip']
         self.a_dstport = pkt['dstport']
         self.a_proto = pkt['proto']
-        self.dscp = pkt['dscp'] # Bit shift twice to the right to get DSCP
-                                     # TODO: verify this is working correctly.
+        self.dscp = pkt['dscp'] # TODO: verify this is working correctly.
         #--------------------------------------------------------------------- #
         self.a_total_fpackets = 1
         self.a_total_fvolume = pkt['len']
@@ -337,8 +341,7 @@ class Flow:
             self.a_sflow_bpackets = self.a_total_bpackets / self.c_active_count
             self.a_sflow_bbytes = self.a_total_bvolume / self.c_active_count
         self.a_duration = self.get_last_time() - self._first
-
-        assert (self.a_duration > 0)
+        assert (self.a_duration >= 0.0)
 
         export = [
                   self.a_srcip,
@@ -463,6 +466,14 @@ class Flow:
         else:
             return self._flast if (self._flast > self._blast) else self._blast
 
+    def dumpFlow(self):
+        '''
+        Dumps a flow, regardless of status.
+
+        Dumps all a flow's contents for debugging purposes.
+        '''
+        log.error("Dumping flow to flow_dump")
+
     def add(self, pkt):
         '''
         Add a packet to the current flow.
@@ -482,17 +493,20 @@ class Flow:
         diff = now - last
         if diff > FLOW_TIMEOUT:
             return 2
-
-        #Gather some statistics
-        len = pkt['len']
-        hlen = pkt['iphlen'] + pkt['prhlen']
-        assert (now >= self._first)
         # Ignore re-ordered packets
         if (now < last):
             log.info("Flow: ignoring reordered packet. %d < %d" %
                       (now, last))
             return 0
             #raise NotImplementedError
+        # Add debugging info
+#        if log.isEnabledFor(logging.DEBUG):
+#            self.d_packets.append(pkt['num'])
+        # OK - we're serious about this packet. Lets add it.
+        #Gather some statistics
+        len = pkt['len']
+        hlen = pkt['iphlen'] + pkt['prhlen']
+        assert (now >= self._first)
         # Update the global variable _pdir which holds the direction of the
         # packet currently in question.  
         if (pkt['srcip'] == self._first_packet['srcip']):
@@ -607,10 +621,14 @@ class Flow:
         if self._valid:
             try:
                 print self
-            except:
+            except Exception as exception:
+                exc_type, exc_value, exc_traceback = sys.exc_info()
                 log.error("Error printing flow %d which starts with packet %d" %
                           (self._id, self._first_packet['num']))
-                log.error("First packet: %d Last: %d" % 
+                log.error("First packet: %f Last: %f" % 
                           (self._first, self.get_last_time()))
-                raise AssertionError
+                repr(traceback.format_exception(exc_type, 
+                                                exc_value, 
+                                                exc_traceback))
+                raise exception
 #--------------------------------------------------------------------- End: Flow
