@@ -601,7 +601,7 @@ class Flow:
                 if (tcp_set(pkt['flags'], TCP_PSH)):
                     self.a_bpsh_cnt += 1
                 if (tcp_set(pkt['flags'], TCP_URG)):
-                    self.burg_cnt += 1
+                    self.a_burg_cnt += 1
             # Update the last backward packet time stamp
             self._blast = now
 
