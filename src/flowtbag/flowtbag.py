@@ -20,7 +20,7 @@
    @author: Daniel Arndt <danielarndt@gmail.com>
 '''
 
-import sys
+import sys, traceback
 import argparse
 import logging
 import time
@@ -51,8 +51,8 @@ def sort_by_IP(t):
 def dumphex(s):
     bytes = map(lambda x: '%.2x' % x, map(ord, s))
     for i in xrange(0,len(bytes)/16):
-        log.debug('    %s' % string.join(bytes[i*16:(i+1)*16],' '))
-    log.debug('    %s' % string.join(bytes[(i+1)*16:],' '))
+        log.error('    %s' % string.join(bytes[i*16:(i+1)*16],' '))
+    log.error('    %s' % string.join(bytes[(i+1)*16:],' '))
 
 class Flowtbag:
     '''
@@ -161,27 +161,40 @@ class Flowtbag:
             #log.debug('Ignoring non-IPv4 packet')
             return
         if pkt['proto'] == 6:
-            if len(pkt['data']) < 5:
+            if len(pkt['data']) < 20:
                 log.info("Ignoring malformed TCP header on packet %d" % 
                           (pkt['num']))
                 return
             try:
                 self.decode_TCP_layer(pkt['data'], pkt)
-            except:
+            except Exception as e:
+                exc_type, exc_value, exc_traceback = sys.exc_info()
                 log.error("Error reading TCP header on packet %d" % 
                           (pkt['num']))
                 log.error("Size: %d iphlen: %d" % 
                           (len(data), pkt['iphlen']))
+                log.error("TCP header size: %d" % len(pkt['data']))
                 dumphex(data)
-                raise Exception
+                log.error(repr(traceback.format_exception(exc_type, 
+                                                          exc_value, 
+                                                          exc_traceback)))
+                raise e
         elif pkt['proto'] == 17:
+            if len(pkt['data']) < 8:
+                log.info("Ignoring malformed UDP header on packet %d" % 
+                          (pkt['num']))
+                return
             try:
                 self.decode_UDP_layer(pkt['data'], pkt)
-            except:
+            except Exception as e:
+                exc_type, exc_value, exc_traceback = sys.exc_info()
                 log.error("Error reading UDP header on packet %d" % 
                           (pkt['num']))
                 dumphex(data)
-                raise Exception
+                log.error(repr(traceback.format_exception(exc_type, 
+                                                          exc_value, 
+                                                          exc_traceback)))
+                raise e
         else:
             #log.debug('Ignoring non-TCP/UDP packet')
             return

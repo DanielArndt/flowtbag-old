@@ -167,7 +167,7 @@ class Flow:
         self.a_dstip = pkt['dstip']
         self.a_dstport = pkt['dstport']
         self.a_proto = pkt['proto']
-        self.dscp = pkt['dscp'] # TODO: verify this is working correctly.
+        self.a_dscp = pkt['dscp'] # TODO: verify this is working correctly.
         #--------------------------------------------------------------------- #
         self.a_total_fpackets = 1
         self.a_total_fvolume = pkt['len']
@@ -387,7 +387,8 @@ class Flow:
                   self.a_furg_cnt,
                   self.a_burg_cnt,
                   self.a_total_fhlen,
-                  self.a_total_bhlen
+                  self.a_total_bhlen,
+                  self.a_dscp
                   ]
         return ','.join(map(str, export))
 
@@ -571,10 +572,10 @@ class Flow:
         else:
             # Packet is travelling in the backward direction, check if dscp is
             # set in this direction
-            if self._blast == 0 and self.dscp == 0:
+            if self._blast == 0 and self.a_dscp == 0:
                 # Check only first packet in backward dir, and make sure it has
                 # not been set already.
-                self.dscp = pkt['dscp']
+                self.a_dscp = pkt['dscp']
             # Calculate some statistics
             # Packet length
             if len < self.a_min_bpktl or self.a_min_bpktl == 0:
@@ -621,14 +622,14 @@ class Flow:
         if self._valid:
             try:
                 print self
-            except Exception as exception:
+            except Exception as e:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 log.error("Error printing flow %d which starts with packet %d" %
                           (self._id, self._first_packet['num']))
                 log.error("First packet: %f Last: %f" % 
                           (self._first, self.get_last_time()))
-                repr(traceback.format_exception(exc_type, 
-                                                exc_value, 
-                                                exc_traceback))
-                raise exception
+                log.error(repr(traceback.format_exception(exc_type, 
+                                                          exc_value, 
+                                                          exc_traceback)))
+                raise e
 #--------------------------------------------------------------------- End: Flow
