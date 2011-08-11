@@ -43,7 +43,7 @@ TCP_URG = 0x20
 def stddev(sqsum, sum, count):
     return math.sqrt((sqsum - (sum ** 2 / count)) / (count - 1))
 
-def tcp_set(find, flags):
+def tcp_set(flags, find):
     '''
     Checks if a flag is set or not.
     
@@ -437,7 +437,7 @@ class Flow:
         elif pkt['proto'] == 6:
             # TCP
             if isinstance(self._cstate, STATE_TCP_ESTABLISHED):
-                hlen = pkt['iphlen'] + pkt['prlen']
+                hlen = pkt['iphlen'] + pkt['prhlen']
                 if pkt['len'] > hlen:
                     #TODO: Why would we need a hasdata variable such as in NM?
                     self._valid = True
