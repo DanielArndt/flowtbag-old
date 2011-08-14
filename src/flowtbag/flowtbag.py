@@ -199,7 +199,6 @@ class Flowtbag:
             return
         # We're really going ahead with this packet! Let's get 'er done.
         pkt['time'] = int(ts * 1000000)
-        if pkt['len'] != pktlen:
         flow_tuple = (pkt['srcip'],
                       pkt['srcport'], 
                       pkt['dstip'], 
