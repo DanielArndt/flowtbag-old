@@ -67,7 +67,7 @@ class Flowtbag:
             # Set up pylibpcap
             pcap_reader = pcap.pcapObject()
             pcap_reader.open_offline(filename)
-#            pcap_reader.setfilter('(tcp or udp)', 0, 0)
+            pcap_reader.setfilter("tcp or udp", 0, 0)
             pcap_reader.loop(-1,self.callback)
             self.exportAll()
         except KeyboardInterrupt:
@@ -146,7 +146,6 @@ class Flowtbag:
                      len(self.active_flows))
             self.start_time_interval = self.end_time_interval
             self.cleanup_active(ts)
-        #log.debug("IP field: %s" % ba.hexlify(data[12:14]))
         pkt={}
         # Check if the packet is an IP packet
         if not data[12:14] == '\x08\x00':
@@ -158,7 +157,7 @@ class Flowtbag:
             raise Exception
         self.decode_IP_layer(data[14:], pkt)
         if pkt['version'] != 4:
-            #log.debug('Ignoring non-IPv4 packet')
+            #Ignore non-IPv4
             return
         if pkt['proto'] == 6:
             if len(pkt['data']) < 20:
@@ -198,9 +197,11 @@ class Flowtbag:
         else:
             #log.debug('Ignoring non-TCP/UDP packet')
             return
-        del pkt['data']
         # We're really going ahead with this packet! Let's get 'er done.
-        pkt['time'] = ts
+        pkt['time'] = int(ts * 1000000)
+        if pkt['len'] != pktlen:
+            log.info("%d pkt[len]: %d pktlen: %d iphlen: %d prhlen: %d" % 
+                     (self.count, pkt['len'], pktlen, pkt['iphlen'], pkt['prhlen'])) 
         flow_tuple = (pkt['srcip'],
                       pkt['srcport'], 
                       pkt['dstip'], 
@@ -209,7 +210,7 @@ class Flowtbag:
         flow_tuple = sort_by_IP(flow_tuple)
         # Find if a flow already exists for this tuple
         if flow_tuple not in self.active_flows:
-            # The a flow of this tuple does not exists yet, create it.
+            # A flow of this tuple does not exists yet, create it.
             self.create_flow(pkt, flow_tuple)
         else:
             # A flow of this tuple already exists, add to it.
@@ -243,7 +244,7 @@ if __name__ == '__main__':
     arg_parser.add_argument('-r',
                             dest='report',
                             type=int,
-                            default=500000,
+                            default=5000000,
                             help='interval (num pkts) which stats be reported')
     args = arg_parser.parse_args()
     if args.report:

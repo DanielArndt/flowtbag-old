@@ -26,8 +26,11 @@
    capture file. Flowtbag was designed with offline processing as the primary
    focus.
 
-3. Usage------------------------------------------------------------------------
+3. Requirements-----------------------------------------------------------------
 
+   Currently, Flowtbag requirements are python2.7, libpcap, and pylibpcap.
+
+4. Usage------------------------------------------------------------------------
    The program's usage is currently left undocumented due to the rapidly
    changing functionality of the program in its early stages. However, if you
    run ./flowtbag.py the currently implemented options should be displayed. A
