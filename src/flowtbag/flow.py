@@ -31,12 +31,12 @@ from tcp_state import *
 log = logging.getLogger()
 
 #---------------------------------------------------------------------- Settings
-FLOW_TIMEOUT = 600.0 # Flow timeout in seconds 
-IDLE_THRESHOLD = 1.0
+FLOW_TIMEOUT = 600000000 # Flow timeout in seconds 
+IDLE_THRESHOLD = 1000000
 #----------------------------------------------------------------- End: Settings
 
 def stddev(sqsum, sum, count):
-    return math.sqrt((sqsum - (sum ** 2 / count)) / (count - 1))
+    return int(math.sqrt((sqsum - (sum ** 2 / count)) / (count - 1)))
 
 #==============================================================================#
 # Begin code for Flow class                                                    #
@@ -125,7 +125,7 @@ class Flow:
         self._first = pkt['time']
         self._flast = pkt['time']
         self._blast = 0
-        self.f = { x:0 for x in features}
+        self.f = { x:0 for x in features }
         #------------------------------------ Basic flow identification criteria
         self.f['srcip'] = pkt['srcip']
         self.f['srcport'] = pkt['srcport']
@@ -276,7 +276,7 @@ class Flow:
             self.f['sflow_bbytes'] = \
                 self.f['total_bvolume'] / self.c_active_count
         self.f['duration'] = self.get_last_time() - self._first
-        assert (self.f['duration'] >= 0.0)
+        assert (self.f['duration'] >= 0)
 
         export = [
                   self.f['srcip'],
@@ -289,30 +289,30 @@ class Flow:
                   self.f['total_bpackets'],
                   self.f['total_bvolume'],
                   self.f['min_fpktl'],
-                  int(self.f['mean_fpktl']),
+                  self.f['mean_fpktl'],
                   self.f['max_fpktl'],
-                  int(self.f['std_fpktl']),
+                  self.f['std_fpktl'],
                   self.f['min_bpktl'],
-                  int(self.f['mean_bpktl']),
-                  int(self.f['max_bpktl']),
-                  int(self.f['std_bpktl']),
-                  int(1000000 * self.f['min_fiat']),
-                  int(1000000 * self.f['mean_fiat']),
-                  int(1000000 * self.f['max_fiat']),
-                  int(1000000 * self.f['std_fiat']),
-                  int(1000000 * self.f['min_biat']),
-                  int(1000000 * self.f['mean_biat']),
-                  int(1000000 * self.f['max_biat']),
-                  int(1000000 * self.f['std_biat']),
-                  int(1000000 * self.f['duration']),
-                  int(1000000 * self.f['min_active']),
-                  int(1000000 * self.f['mean_active']),
-                  int(1000000 * self.f['max_active']),
-                  int(1000000 * self.f['std_active']),
-                  int(1000000 * self.f['min_idle']),
-                  int(1000000 * self.f['mean_idle']),
-                  int(1000000 * self.f['max_idle']),
-                  int(1000000 * self.f['std_idle']),
+                  self.f['mean_bpktl'],
+                  self.f['max_bpktl'],
+                  self.f['std_bpktl'],
+                  self.f['min_fiat'],
+                  self.f['mean_fiat'],
+                  self.f['max_fiat'],
+                  self.f['std_fiat'],
+                  self.f['min_biat'],
+                  self.f['mean_biat'],
+                  self.f['max_biat'],
+                  self.f['std_biat'],
+                  self.f['duration'],
+                  self.f['min_active'],
+                  self.f['mean_active'],
+                  self.f['max_active'],
+                  self.f['std_active'],
+                  self.f['min_idle'],
+                  self.f['mean_idle'],
+                  self.f['max_idle'],
+                  self.f['std_idle'],
                   self.f['sflow_fpackets'],
                   self.f['sflow_fbytes'],
                   self.f['sflow_bpackets'],
@@ -326,7 +326,7 @@ class Flow:
                   self.f['dscp']
                   ]
         return ','.join(map(str, export))
-
+        
     def update_tcp_state(self, pkt):
         '''
         Updates the TCP connection state
