@@ -200,8 +200,6 @@ class Flowtbag:
         # We're really going ahead with this packet! Let's get 'er done.
         pkt['time'] = int(ts * 1000000)
         if pkt['len'] != pktlen:
-            log.info("%d pkt[len]: %d pktlen: %d iphlen: %d prhlen: %d" % 
-                     (self.count, pkt['len'], pktlen, pkt['iphlen'], pkt['prhlen'])) 
         flow_tuple = (pkt['srcip'],
                       pkt['srcport'], 
                       pkt['dstip'], 
