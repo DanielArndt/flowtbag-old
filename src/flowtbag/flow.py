@@ -87,7 +87,7 @@ features = [
     'total_fhlen',
     'total_bhlen',
     'dscp'
-    ]
+]
 
 counters = [
     'fpktl_sqsum',
@@ -117,22 +117,14 @@ class Flow:
     
     Variable naming conventions:
         Prefix - desc
-        _  - Instance variable used for storing information about the flow which 
+        _  - Instance variable used for storing information about the flow which
              is important for calculations or identification purposes but is not
              part of the output.
-            
-        c_ - Counter variables, used for counting totals and other statistics to
-             help in calculating attributes. 
-
-        d_ - Variables used for debugging output.
-    
     '''
     def __init__(self, pkt, id):
         '''
         Constructor. Initialize all values.
         '''
-        if log.isEnabledFor(logging.DEBUG):
-            self.d_packets = [pkt['num']]
         # Set initial values
         self._id = id
         self._first_packet = pkt
@@ -141,22 +133,22 @@ class Flow:
         self._first = pkt['time']
         self._flast = pkt['time']
         self._blast = 0
-        self.f = { x:0 for x in features }
-        self.c = { x:0 for x in counters }
+        f = { x:0 for x in features }
+        c = { x:0 for x in counters }
         #------------------------------------ Basic flow identification criteria
-        self.f['srcip'] = pkt['srcip']
-        self.f['srcport'] = pkt['srcport']
-        self.f['dstip'] = pkt['dstip']
-        self.f['dstport'] = pkt['dstport']
-        self.f['proto'] = pkt['proto']
-        self.f['dscp'] = pkt['dscp']
+        f['srcip'] = pkt['srcip']
+        f['srcport'] = pkt['srcport']
+        f['dstip'] = pkt['dstip']
+        f['dstport'] = pkt['dstport']
+        f['proto'] = pkt['proto']
+        f['dscp'] = pkt['dscp']
         #--------------------------------------------------------------------- #
-        self.f['total_fpackets'] = 1
-        self.f['total_fvolume'] = pkt['len']
-        self.f['min_fpktl'] = pkt['len']
-        self.f['max_fpktl'] = pkt['len']
-        self.c['fpktl_sqsum'] = (pkt['len'] ** 2)
-        self.c['active_start'] = self._first
+        f['total_fpackets'] = 1
+        f['total_fvolume'] = pkt['len']
+        f['min_fpktl'] = pkt['len']
+        f['max_fpktl'] = pkt['len']
+        c['fpktl_sqsum'] = (pkt['len'] ** 2)
+        c['active_start'] = self._first
         if pkt['proto'] == 6:
             # TCP specific
             # Create state machines for the client and server 
@@ -164,10 +156,12 @@ class Flow:
             self._sstate = STATE_TCP_START() # Server state
             # Set TCP flag stats
             if (tcp_set(pkt['flags'], TCP_PSH)):
-                self.f['fpsh_cnt'] = 1
+                f['fpsh_cnt'] = 1
             if (tcp_set(pkt['flags'], TCP_URG)):
-                self.f['furg_cnt'] = 1
-        self.f['total_fhlen'] = pkt['iphlen'] + pkt['prhlen']
+                f['furg_cnt'] = 1
+        f['total_fhlen'] = pkt['iphlen'] + pkt['prhlen']
+        self.f = f
+        self.c = c
         self.update_status(pkt)
 
     def __repr__(self):
@@ -184,109 +178,105 @@ class Flow:
         Exports the stats collected.
         '''
         # Count the last active time
-        diff = self.get_last_time() - self.c['active_start']
-        if diff > self.f['max_active']:
-            self.f['max_active'] = diff
+        f = self.f
+        c = self.c
+        diff = self.get_last_time() - c['active_start']
+        if diff > f['max_active']:
+            f['max_active'] = diff
         if (diff < self.f['min_active'] or 
-            self.f['min_active'] == 0
+            f['min_active'] == 0
             ):
-            self.f['min_active'] = diff
-        self.c['active_time'] += diff
-        self.c['active_sqsum'] += (diff ** 2)
-        self.c['active_count'] += 1
+            f['min_active'] = diff
+        c['active_time'] += diff
+        c['active_sqsum'] += (diff ** 2)
+        c['active_count'] += 1
 
-        assert(self.f['total_fpackets'] > 0)
-        self.f['mean_fpktl'] = \
-            self.f['total_fvolume'] / self.f['total_fpackets']
+        assert(f['total_fpackets'] > 0)
+        f['mean_fpktl'] = f['total_fvolume'] / f['total_fpackets']
         # Standard deviation of packets in the forward direction
-        if self.f['total_fpackets'] > 1:
-            self.f['std_fpktl'] = stddev(self.c['fpktl_sqsum'],
-                                         self.f['total_fvolume'],
-                                         self.f['total_fpackets'])
+        if f['total_fpackets'] > 1:
+            f['std_fpktl'] = stddev(c['fpktl_sqsum'],
+                                    f['total_fvolume'],
+                                    f['total_fpackets'])
         else:
-            self.f['std_fpktl'] = 0
+            f['std_fpktl'] = 0
         # Mean packet length of packets in the packward direction
-        if self.f['total_bpackets'] > 0:
-            self.f['mean_bpktl'] = \
-                self.f['total_bvolume'] / self.f['total_bpackets']
+        if f['total_bpackets'] > 0:
+            f['mean_bpktl'] = f['total_bvolume'] / f['total_bpackets']
         else:
-            self.f['mean_bpktl'] = -1
+            f['mean_bpktl'] = -1
         # Standard deviation of packets in the backward direction
-        if self.f['total_bpackets'] > 1:
-            self.f['std_bpktl'] = stddev(self.c['bpktl_sqsum'],
-                                         self.f['total_bvolume'],
-                                         self.f['total_bpackets'])
+        if f['total_bpackets'] > 1:
+            f['std_bpktl'] = stddev(c['bpktl_sqsum'],
+                                    f['total_bvolume'],
+                                    f['total_bpackets'])
         else:
-            self.f['std_bpktl'] = 0
+            f['std_bpktl'] = 0
         # Mean forward inter-arrival time
         # TODO: Check if we actually need c_fiat_count ?
-        if self.c['fiat_count'] > 0:
-            self.f['mean_fiat'] = self.c['fiat_sum'] / self.c['fiat_count']
+        if c['fiat_count'] > 0:
+            f['mean_fiat'] = c['fiat_sum'] / c['fiat_count']
         else:
-            self.f['mean_fiat'] = 0
+            f['mean_fiat'] = 0
         # Standard deviation of forward inter-arrival times
-        if self.c['fiat_count'] > 1:
-            self.f['std_fiat'] = stddev(self.c['fiat_sqsum'],
-                                        self.c['fiat_sum'],
-                                        self.c['fiat_count'])
+        if c['fiat_count'] > 1:
+            f['std_fiat'] = stddev(c['fiat_sqsum'],
+                                   c['fiat_sum'],
+                                   c['fiat_count'])
         else:
-            self.f['std_fiat'] = 0
+            f['std_fiat'] = 0
         # Mean backward inter-arrival time
-        if self.c['biat_count'] > 0:
-            self.f['mean_biat'] = self.c['biat_sum'] / self.c['biat_count']
+        if c['biat_count'] > 0:
+            f['mean_biat'] = c['biat_sum'] / c['biat_count']
         else:
-            self.f['mean_biat'] = 0
+            f['mean_biat'] = 0
         # Standard deviation of backward inter-arrival times
-        if self.c['biat_count'] > 1:
-            self.f['std_biat'] = stddev(self.c['biat_sqsum'],
-                                        self.c['biat_sum'],
-                                        self.c['biat_count'])
+        if c['biat_count'] > 1:
+            f['std_biat'] = stddev(c['biat_sqsum'],
+                                   c['biat_sum'],
+                                   c['biat_count'])
         else:
-            self.f['std_biat'] = 0
+            f['std_biat'] = 0
         # Mean active time of the sub-flows
-        if self.c['active_count'] > 0:
-            self.f['mean_active'] = \
-                self.c['active_time'] / self.c['active_count']
+        if c['active_count'] > 0:
+            f['mean_active'] = \
+                c['active_time'] / c['active_count']
         else:
             # There should be packets in each direction if we're exporting 
             log.debug("ERR: This shouldn't happen")
             raise Exception
         # Standard deviation of active times of sub-flows
-        if self.c['active_count'] > 1:
-            self.f['std_active'] = stddev(self.c['active_sqsum'],
-                                          self.c['active_time'],
-                                          self.c['active_count'])
+        if c['active_count'] > 1:
+            f['std_active'] = stddev(c['active_sqsum'],
+                                     c['active_time'],
+                                     c['active_count'])
         else:
-            self.f['std_active'] = 0
+            f['std_active'] = 0
         # Mean of idle times between sub-flows
-        if self.c['idle_count'] > 0:
-            self.f['mean_idle'] = self.c['idle_time'] / self.c['idle_count']
+        if c['idle_count'] > 0:
+            f['mean_idle'] = c['idle_time'] / c['idle_count']
         else:
-            self.f['mean_idle'] = 0
+            f['mean_idle'] = 0
         # Standard deviation of idle times between sub-flows
-        if self.c['idle_count'] > 1:
-            self.f['std_idle'] = stddev(self.c['idle_sqsum'],
-                                        self.c['idle_time'],
-                                        self.c['idle_count'])
+        if c['idle_count'] > 1:
+            f['std_idle'] = stddev(c['idle_sqsum'],
+                                   c['idle_time'],
+                                   c['idle_count'])
         else:
-            self.f['std_idle'] = 0
+            f['std_idle'] = 0
         # More sub-flow calculations
-        if self.c['active_count'] > 0:
-            self.f['sflow_fpackets'] = \
-                self.f['total_fpackets'] / self.c['active_count']
-            self.f['sflow_fbytes'] = \
-                self.f['total_fvolume'] / self.c['active_count']
-            self.f['sflow_bpackets'] = \
-                self.f['total_bpackets'] / self.c['active_count']
-            self.f['sflow_bbytes'] = \
-                self.f['total_bvolume'] / self.c['active_count']
-        self.f['duration'] = self.get_last_time() - self._first
-        assert (self.f['duration'] >= 0)
+        if c['active_count'] > 0:
+            f['sflow_fpackets'] = f['total_fpackets'] / c['active_count']
+            f['sflow_fbytes']   = f['total_fvolume']  / c['active_count']
+            f['sflow_bpackets'] = f['total_bpackets'] / c['active_count']
+            f['sflow_bbytes']   = f['total_bvolume']  / c['active_count']
+        f['duration'] = self.get_last_time() - self._first
+        assert (f['duration'] >= 0)
 
         export = []
         append = export.append
         for feat in features:
-            append(self.f[feat])
+            append(f[feat])
         return ','.join(map(str, export))
         
     def update_tcp_state(self, pkt):
@@ -403,6 +393,8 @@ class Flow:
 #            self.d_packets.append(pkt['num'])
         # OK - we're serious about this packet. Lets add it.
         #Gather some statistics
+        f = self.f
+        c = self.c
         len = pkt['len']
         hlen = pkt['iphlen'] + pkt['prhlen']
         assert (now >= self._first)
@@ -416,92 +408,90 @@ class Flow:
         if diff > IDLE_THRESHOLD:
             # The flow has been idle previous to this packet, so calc idle time 
             # stats
-            if diff > self.f['max_idle']:
-                self.f['max_idle'] = diff
-            if (diff < self.f['min_idle'] or 
-                self.f['min_idle'] == 0
-                ):
-                self.f['min_idle'] = diff
-            self.c['idle_time'] += diff
-            self.c['idle_sqsum'] += (diff ** 2)
-            self.c['idle_count'] += 1
+            if diff > f['max_idle']:
+                f['max_idle'] = diff
+            if (diff < f['min_idle'] or f['min_idle'] == 0):
+                f['min_idle'] = diff
+            c['idle_time'] += diff
+            c['idle_sqsum'] += (diff ** 2)
+            c['idle_count'] += 1
             # Active time stats - calculated by looking at the previous packet
             # time and the packet time for when the last idle time ended.
-            diff = last - self.c['active_start']
-            if diff > self.f['max_active']:
-                self.f['max_active'] = diff
-            if diff < self.f['min_active'] or self.f['min_active'] == 0:
-                self.f['min_active'] = diff
-            self.c['active_time'] += diff
-            self.c['active_sqsum'] += (diff ** 2)
-            self.c['active_count'] += 1
+            diff = last - c['active_start']
+            if diff > f['max_active']:
+                f['max_active'] = diff
+            if diff < f['min_active'] or f['min_active'] == 0:
+                f['min_active'] = diff
+            c['active_time'] += diff
+            c['active_sqsum'] += (diff ** 2)
+            c['active_count'] += 1
             self._flast = 0
             self._blast = 0
-            self.c['active_start'] = now
+            c['active_start'] = now
         # Set bi-directional attributes.
         if self._pdir == "f":
             # Packet is travelling in the forward direction
             # Calculate some statistics
             # Packet length
-            if len < self.f['min_fpktl'] or self.f['min_fpktl'] == 0:
-                self.f['min_fpktl'] = len
-            if len > self.f['max_fpktl']:
-                self.f['max_fpktl'] = len
-            self.f['total_fvolume'] += len # Doubles up as c_fpktl_sum from NM
-            self.c['fpktl_sqsum'] += (len ** 2)
-            self.f['total_fpackets'] += 1
-            self.f['total_fhlen'] += hlen
+            if len < f['min_fpktl'] or f['min_fpktl'] == 0:
+                f['min_fpktl'] = len
+            if len > f['max_fpktl']:
+                f['max_fpktl'] = len
+            f['total_fvolume'] += len # Doubles up as c_fpktl_sum from NM
+            c['fpktl_sqsum'] += (len ** 2)
+            f['total_fpackets'] += 1
+            f['total_fhlen'] += hlen
             # Interarrival time
             if self._flast > 0:
                 diff = now - self._flast
-                if diff < self.f['min_fiat'] or self.f['min_fiat'] == 0:
-                    self.f['min_fiat'] = diff
-                if diff > self.f['max_fiat']:
-                    self.f['max_fiat'] = diff
-                self.c['fiat_sum'] += diff
-                self.c['fiat_sqsum'] += (diff ** 2)
-                self.c['fiat_count'] += 1
+                if diff < f['min_fiat'] or f['min_fiat'] == 0:
+                    f['min_fiat'] = diff
+                if diff > f['max_fiat']:
+                    f['max_fiat'] = diff
+                c['fiat_sum'] += diff
+                c['fiat_sqsum'] += (diff ** 2)
+                c['fiat_count'] += 1
             if pkt['proto'] == 6:
                 # Packet is using TCP protocol
                 if (tcp_set(pkt['flags'], TCP_PSH)):
-                    self.f['fpsh_cnt'] += 1
+                    f['fpsh_cnt'] += 1
                 if (tcp_set(pkt['flags'], TCP_URG)):
-                    self.f['furg_cnt'] += 1
+                    f['furg_cnt'] += 1
             # Update the last forward packet time stamp
             self._flast = now
         else:
             # Packet is travelling in the backward direction, check if dscp is
             # set in this direction
-            if self._blast == 0 and self.f['dscp'] == 0:
+            if self._blast == 0 and f['dscp'] == 0:
                 # Check only first packet in backward dir, and make sure it has
                 # not been set already.
-                self.f['dscp'] = pkt['dscp']
+                f['dscp'] = pkt['dscp']
             # Calculate some statistics
             # Packet length
-            if len < self.f['min_bpktl'] or self.f['min_bpktl'] == 0:
-                self.f['min_bpktl'] = len
-            if len > self.f['max_bpktl']:
-                self.f['max_bpktl'] = len
-            self.f['total_bvolume'] += len # Doubles up as c_bpktl_sum from NM
-            self.c['bpktl_sqsum'] += (len ** 2)
-            self.f['total_bpackets'] += 1
-            self.f['total_bhlen'] += hlen
+            if len < f['min_bpktl'] or f['min_bpktl'] == 0:
+                f['min_bpktl'] = len
+            if len > f['max_bpktl']:
+                f['max_bpktl'] = len
+            f['total_bvolume'] += len # Doubles up as c_bpktl_sum from NM
+            c['bpktl_sqsum'] += (len ** 2)
+            f['total_bpackets'] += 1
+            f['total_bhlen'] += hlen
             # Inter-arrival time
             if self._blast > 0:
                 diff = now - self._blast
-                if diff < self.f['min_biat'] or self.f['min_biat'] == 0:
-                    self.f['min_biat'] = diff
-                if diff > self.f['max_biat']:
-                    self.f['max_biat'] = diff
-                self.c['biat_sum'] += diff
-                self.c['biat_sqsum'] += (diff ** 2)
-                self.c['biat_count'] += 1
+                if diff < f['min_biat'] or f['min_biat'] == 0:
+                    f['min_biat'] = diff
+                if diff > f['max_biat']:
+                    f['max_biat'] = diff
+                c['biat_sum'] += diff
+                c['biat_sqsum'] += (diff ** 2)
+                c['biat_count'] += 1
             if pkt['proto'] == 6:
                 # Packet is using TCP protocol
                 if (tcp_set(pkt['flags'], TCP_PSH)):
-                    self.f['bpsh_cnt'] += 1
+                    f['bpsh_cnt'] += 1
                 if (tcp_set(pkt['flags'], TCP_URG)):
-                    self.f['burg_cnt'] += 1
+                    f['burg_cnt'] += 1
             # Update the last backward packet time stamp
             self._blast = now
 

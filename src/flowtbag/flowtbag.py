@@ -145,7 +145,7 @@ class Flowtbag:
             log.info("Current size of the flowtbag: %d" % 
                      len(self.active_flows))
             self.start_time_interval = self.end_time_interval
-            self.cleanup_active(ts)
+            self.cleanup_active(int(ts * 1000000))
         pkt={}
         # Check if the packet is an IP packet
         if not data[12:14] == '\x08\x00':
