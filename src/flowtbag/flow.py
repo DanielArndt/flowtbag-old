@@ -86,7 +86,7 @@ features = [
     'burg_cnt',
     'total_fhlen',
     'total_bhlen',
-    'dscp'
+    'dscp',
 ]
 
 counters = [
@@ -115,18 +115,13 @@ class Flow:
     contains several statistics about the flow as well as stores the first 
     packet of the flow for reference.
     
-    Variable naming conventions:
-        Prefix - desc
-        _  - Instance variable used for storing information about the flow which
-             is important for calculations or identification purposes but is not
-             part of the output.
     '''
     def __init__(self, pkt, id):
         '''
         Constructor. Initialize all values.
         '''
         # Set initial values
-        self._id = id
+        self._id = id #An integer for identifying the flows ID number
         self._first_packet = pkt
         self._valid = False
         self._pdir = "f"
@@ -239,8 +234,7 @@ class Flow:
             f['std_biat'] = 0
         # Mean active time of the sub-flows
         if c['active_count'] > 0:
-            f['mean_active'] = \
-                c['active_time'] / c['active_count']
+            f['mean_active'] = c['active_time'] / c['active_count']
         else:
             # There should be packets in each direction if we're exporting 
             log.debug("ERR: This shouldn't happen")
@@ -395,7 +389,7 @@ class Flow:
         #Gather some statistics
         f = self.f
         c = self.c
-        len = pkt['len']
+        length = pkt['len']
         hlen = pkt['iphlen'] + pkt['prhlen']
         assert (now >= self._first)
         # Update the global variable _pdir which holds the direction of the
@@ -433,12 +427,12 @@ class Flow:
             # Packet is travelling in the forward direction
             # Calculate some statistics
             # Packet length
-            if len < f['min_fpktl'] or f['min_fpktl'] == 0:
-                f['min_fpktl'] = len
-            if len > f['max_fpktl']:
-                f['max_fpktl'] = len
-            f['total_fvolume'] += len # Doubles up as c_fpktl_sum from NM
-            c['fpktl_sqsum'] += (len ** 2)
+            if length < f['min_fpktl'] or f['min_fpktl'] == 0:
+                f['min_fpktl'] = length
+            if length > f['max_fpktl']:
+                f['max_fpktl'] = length
+            f['total_fvolume'] += length # Doubles up as c_fpktl_sum from NM
+            c['fpktl_sqsum'] += (length ** 2)
             f['total_fpackets'] += 1
             f['total_fhlen'] += hlen
             # Interarrival time
@@ -468,12 +462,12 @@ class Flow:
                 f['dscp'] = pkt['dscp']
             # Calculate some statistics
             # Packet length
-            if len < f['min_bpktl'] or f['min_bpktl'] == 0:
-                f['min_bpktl'] = len
-            if len > f['max_bpktl']:
-                f['max_bpktl'] = len
-            f['total_bvolume'] += len # Doubles up as c_bpktl_sum from NM
-            c['bpktl_sqsum'] += (len ** 2)
+            if length < f['min_bpktl'] or f['min_bpktl'] == 0:
+                f['min_bpktl'] = length
+            if length > f['max_bpktl']:
+                f['max_bpktl'] = length
+            f['total_bvolume'] += length # Doubles up as c_bpktl_sum from NM
+            c['bpktl_sqsum'] += (length ** 2)
             f['total_bpackets'] += 1
             f['total_bhlen'] += hlen
             # Inter-arrival time

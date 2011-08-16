@@ -59,7 +59,7 @@ class STATE_TCP(object):
         
         First the RST and FIN flags are checked. If either of these are set, the
         connection state is set to either TCP_CLOSED or TCP_FIN respectively.
-        Next, the function attempts to find a transition in the map called /tr/.
+        Next, the function attempts to find a transition,
         If no transition is found, then the function returns itself. 
         
         '''
@@ -67,40 +67,40 @@ class STATE_TCP(object):
             return STATE_TCP_CLOSED()
         if tcp_set(flags, TCP_FIN) and dir == _pdir:
             return STATE_TCP_FIN()
-        # Add all states satisfied by the function in the map /tr/ given /flags/
-        next_state = [ s for f, s in self.tr if f(flags, dir, _pdir)]
-        try:
-            return eval(next_state[0])()
-        except:
-            return self # Default to no transition
+        return self.tr(flags, dir, _pdir)
 
     def __str__(self):
         return self.__class__.__name__
 
 class STATE_TCP_START(STATE_TCP):
-    tr = [(lambda flags, dir, pdir: 
-           tcp_set(flags, TCP_SYN) and dir == pdir, 
-           "STATE_TCP_SYN")]
-
+    def tr(self, flags, dir, pdir):
+        if tcp_set(flags, TCP_SYN) and dir == pdir:
+           return STATE_TCP_SYN()
+        return self
+        
 class STATE_TCP_SYN(STATE_TCP):
-    tr = [(lambda flags, dir, pdir: 
-           tcp_set(flags, TCP_SYN) and
-           tcp_set(flags, TCP_ACK) and dir != pdir, 
-           "STATE_TCP_SYNACK")]
+    def tr(self, flags, dir, pdir):
+        if tcp_set(flags, TCP_SYN) and tcp_set(flags, TCP_ACK) and dir != pdir:
+            return  STATE_TCP_SYNACK()
+        return self
 
 class STATE_TCP_SYNACK(STATE_TCP):
-    tr = [(lambda flags, dir, pdir: 
-           tcp_set(flags, TCP_ACK) and dir == pdir, 
-           "STATE_TCP_ESTABLISHED")]
+    def tr(self, flags, dir, pdir):
+        if tcp_set(flags, TCP_ACK) and dir == pdir:
+            return STATE_TCP_ESTABLISHED()
+        return self
 
 class STATE_TCP_ESTABLISHED(STATE_TCP):
-    tr = []
-
+    def tr(self, flags, dir, pdir):
+        return self
+    
 class STATE_TCP_FIN(STATE_TCP):
-    tr = [(lambda flags, dir, pdir: 
-           tcp_set(flags, TCP_ACK) and dir != pdir, 
-           "STATE_TCP_CLOSED")]
+    def tr(self, flags, dir, pdir):
+        if tcp_set(flags, TCP_ACK) and dir != pdir:
+            return STATE_TCP_CLOSED()
+        return self
 
 class STATE_TCP_CLOSED(STATE_TCP):
-    tr = []
+    def tr(self, flags, dir, pdir):
+        return self
 #-------------------------------------------------------- End: TCP state machine
