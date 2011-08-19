@@ -15,8 +15,6 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 
-   Contributors:
-
    @author: Daniel Arndt <danielarndt@gmail.com>
 '''
 import logging
@@ -147,8 +145,8 @@ class Flow:
         if pkt['proto'] == 6:
             # TCP specific
             # Create state machines for the client and server 
-            self._cstate = STATE_TCP_START() # Client state
-            self._sstate = STATE_TCP_START() # Server state
+            self._cstate = STATE_TCP() # Client state
+            self._sstate = STATE_TCP() # Server state
             # Set TCP flag stats
             if (tcp_set(pkt['flags'], TCP_PSH)):
                 f['fpsh_cnt'] = 1
@@ -287,9 +285,9 @@ class Flow:
                   for the flow.
         '''
         # Update client state
-        self._cstate = self._cstate.update(pkt['flags'], "f", self._pdir)
+        self._cstate.update(pkt['flags'], "f", self._pdir)
         # Update server state
-        self._sstate = self._sstate.update(pkt['flags'], "b", self._pdir)
+        self._sstate.update(pkt['flags'], "b", self._pdir)
 
     def update_status(self, pkt):
         '''
@@ -318,7 +316,7 @@ class Flow:
                 self._valid = True
         elif pkt['proto'] == 6:
             # TCP
-            if isinstance(self._cstate, STATE_TCP_ESTABLISHED):
+            if self._cstate.state == STATE_TCP_ESTABLISHED:
                 hlen = pkt['iphlen'] + pkt['prhlen']
                 if pkt['len'] > hlen:
                     #TODO: Why would we need a hasdata variable such as in NM?
@@ -493,8 +491,8 @@ class Flow:
         self.update_status(pkt)            
 
         if (pkt['proto'] == 6 and
-            isinstance(self._cstate, STATE_TCP_CLOSED) and
-            isinstance(self._sstate, STATE_TCP_CLOSED)):
+            self._cstate.state == STATE_TCP_CLOSED and
+            self._sstate.state == STATE_TCP_CLOSED):
             return 1
         else:
             return 0
@@ -502,18 +500,8 @@ class Flow:
     def checkidle(self, time):
         return True if time - self.get_last_time() > FLOW_TIMEOUT else False
         
-    def export(self):
+    def isValid(self):
         if self._valid:
-            try:
-                print self
-            except Exception as e:
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                log.error("Error printing flow %d which starts with packet %d" %
-                          (self._id, self._first_packet['num']))
-                log.error("First packet: %f Last: %f" % 
-                          (self._first, self.get_last_time()))
-                log.error(repr(traceback.format_exception(exc_type, 
-                                                          exc_value, 
-                                                          exc_traceback)))
-                raise e
+            return True
+        return False
 #--------------------------------------------------------------------- End: Flow

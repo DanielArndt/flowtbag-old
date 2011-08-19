@@ -15,8 +15,6 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 
-   Contributors:
-
    @author: Daniel Arndt <danielarndt@gmail.com>
 '''
 
@@ -54,6 +52,23 @@ def dumphex(s):
         log.error('    %s' % string.join(bytes[i*16:(i+1)*16],' '))
     log.error('    %s' % string.join(bytes[(i+1)*16:],' '))
 
+def exportFlow(flow):
+    if not flow._valid:
+        return
+    try:
+        print flow
+    except Exception as e:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        log.error("Error printing flow %d which starts with packet %d" %
+                  (self._id, self._first_packet['num']))
+        log.error("First packet: %f Last: %f" % 
+                  (self._first, self.get_last_time()))
+        log.error(repr(traceback.format_exception(exc_type, 
+                                                  exc_value, 
+                                                  exc_traceback)))
+        raise e
+
+
 class Flowtbag:
     '''
     classdocs
@@ -81,7 +96,7 @@ class Flowtbag:
 
     def exportAll(self):
         for flow in self.active_flows.values():
-            flow.export()
+            exportFlow(flow)
 
     def create_flow(self, pkt, flow_tuple):
         self.flow_count += 1
@@ -93,7 +108,7 @@ class Flowtbag:
         for flow_tuple in self.active_flows.keys():
             flow = self.active_flows[flow_tuple]
             if flow.checkidle(time):
-                flow.export()
+                exportFlow(flow)
                 del self.active_flows[flow_tuple]
                 count += 1
         log.info("Cleaned up %d idle flows" % count)
@@ -217,13 +232,13 @@ class Flowtbag:
                 return
             elif return_val == 1:
                 #This packet ended the TCP connection. Export it.
-                flow.export()
+                exportFlow(flow)
                 del self.active_flows[flow_tuple]
             elif return_val == 2:
                 # This packet has been added to the wrong flow. This means the
                 # previous flow has ended. We export the old flow, remove it,
                 # and create a new flow.
-                flow.export()
+                exportFlow(flow)
                 del self.active_flows[flow_tuple]
                 self.create_flow(pkt, flow_tuple)
 
@@ -243,6 +258,11 @@ if __name__ == '__main__':
                             type=int,
                             default=5000000,
                             help='interval (num pkts) which stats be reported')
+    arg_parser.add_argument('-s',
+                            dest='split',
+                            type=str,
+                            default=None,
+                            help='splits the output into several files')
     args = arg_parser.parse_args()
     if args.report:
         REPORT_INTERVAL = args.report

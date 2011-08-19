@@ -15,8 +15,6 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 
-   Contributors:
-
    @author: Daniel Arndt <danielarndt@gmail.com>
 '''
 
@@ -26,6 +24,13 @@ TCP_RST = 0x04
 TCP_PSH = 0x08
 TCP_ACK = 0x10
 TCP_URG = 0x20
+
+STATE_TCP_START = 0
+STATE_TCP_SYN = 1
+STATE_TCP_SYNACK = 2
+STATE_TCP_ESTABLISHED = 3
+STATE_TCP_FIN = 4
+STATE_TCP_CLOSED = 5
 
 def tcp_set(flags, find):
     '''
@@ -44,19 +49,21 @@ def tcp_set(flags, find):
 # TCP connection states. These define the finite state machine used for        #
 # verifying TCP flow validity.                                                 #
 #==============================================================================#
-class STATE_TCP(object):
+class STATE_TCP():
     ''' 
     Superclass for a TCP connection state machine.  
     
     Defines the behavior of a state within a generalized finite state machine.
     Currently, the rules perfectly resemble those used by NetMate
     '''
+    def __init__(self):
+        self.state = STATE_TCP_START
+
     #TODO: Update the state machine to include more robust checks. Current 
     # implementation imitates NetMate state machine. 
-    def update(self, flags, dir, _pdir):
+    def update(self, flags, _dir, _pdir):
         '''
         Updates the TCP state machine.
-        
         First the RST and FIN flags are checked. If either of these are set, the
         connection state is set to either TCP_CLOSED or TCP_FIN respectively.
         Next, the function attempts to find a transition,
@@ -64,43 +71,26 @@ class STATE_TCP(object):
         
         '''
         if tcp_set(flags, TCP_RST):
-            return STATE_TCP_CLOSED()
-        if tcp_set(flags, TCP_FIN) and dir == _pdir:
-            return STATE_TCP_FIN()
-        return self.tr(flags, dir, _pdir)
+            self.state = STATE_TCP_CLOSED
+        elif tcp_set(flags, TCP_FIN) and _dir == _pdir:
+            self.state = STATE_TCP_FIN
+
+        elif self.state == STATE_TCP_START:
+            if tcp_set(flags, TCP_SYN) and _dir == _pdir:
+                self.state = STATE_TCP_SYN
+        elif self.state == STATE_TCP_SYN:
+            if (tcp_set(flags, TCP_SYN) and 
+                tcp_set(flags, TCP_ACK) and 
+                _dir != _pdir):
+                self.state = STATE_TCP_SYNACK
+        elif self.state == STATE_TCP_SYNACK:
+            if tcp_set(flags, TCP_ACK) and _dir == _pdir:
+                self.state = STATE_TCP_ESTABLISHED
+        elif self.state == STATE_TCP_FIN:
+            if tcp_set(flags, TCP_ACK) and _dir != _pdir:
+                self.state = STATE_TCP_CLOSED
 
     def __str__(self):
         return self.__class__.__name__
 
-class STATE_TCP_START(STATE_TCP):
-    def tr(self, flags, dir, pdir):
-        if tcp_set(flags, TCP_SYN) and dir == pdir:
-           return STATE_TCP_SYN()
-        return self
-        
-class STATE_TCP_SYN(STATE_TCP):
-    def tr(self, flags, dir, pdir):
-        if tcp_set(flags, TCP_SYN) and tcp_set(flags, TCP_ACK) and dir != pdir:
-            return  STATE_TCP_SYNACK()
-        return self
-
-class STATE_TCP_SYNACK(STATE_TCP):
-    def tr(self, flags, dir, pdir):
-        if tcp_set(flags, TCP_ACK) and dir == pdir:
-            return STATE_TCP_ESTABLISHED()
-        return self
-
-class STATE_TCP_ESTABLISHED(STATE_TCP):
-    def tr(self, flags, dir, pdir):
-        return self
-    
-class STATE_TCP_FIN(STATE_TCP):
-    def tr(self, flags, dir, pdir):
-        if tcp_set(flags, TCP_ACK) and dir != pdir:
-            return STATE_TCP_CLOSED()
-        return self
-
-class STATE_TCP_CLOSED(STATE_TCP):
-    def tr(self, flags, dir, pdir):
-        return self
 #-------------------------------------------------------- End: TCP state machine
