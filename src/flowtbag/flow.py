@@ -29,7 +29,7 @@ from tcp_state import *
 log = logging.getLogger()
 
 #---------------------------------------------------------------------- Settings
-FLOW_TIMEOUT = 600000000 # Flow timeout in seconds 
+FLOW_TIMEOUT = 600000000 # Flow timeout in microseconds
 IDLE_THRESHOLD = 1000000
 #----------------------------------------------------------------- End: Settings
 

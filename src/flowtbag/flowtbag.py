@@ -52,7 +52,7 @@ def dumphex(s):
         log.error('    %s' % string.join(bytes[i*16:(i+1)*16],' '))
     log.error('    %s' % string.join(bytes[(i+1)*16:],' '))
 
-def exportFlow(flow):
+def export_flow(flow):
     if not flow._valid:
         return
     try:
@@ -84,7 +84,7 @@ class Flowtbag:
             pcap_reader.open_offline(filename)
             pcap_reader.setfilter("tcp or udp", 0, 0)
             pcap_reader.loop(-1,self.callback)
-            self.exportAll()
+            self.export_all()
         except KeyboardInterrupt:
             exit(0)
 
@@ -94,9 +94,9 @@ class Flowtbag:
     def __str__(self):
         return "I am a Flowtbag of size %s" % (len(self.active_flows))
 
-    def exportAll(self):
+    def export_all(self):
         for flow in self.active_flows.values():
-            exportFlow(flow)
+            export_flow(flow)
 
     def create_flow(self, pkt, flow_tuple):
         self.flow_count += 1
@@ -108,7 +108,7 @@ class Flowtbag:
         for flow_tuple in self.active_flows.keys():
             flow = self.active_flows[flow_tuple]
             if flow.checkidle(time):
-                exportFlow(flow)
+                export_flow(flow)
                 del self.active_flows[flow_tuple]
                 count += 1
         log.info("Cleaned up %d idle flows" % count)
@@ -232,13 +232,13 @@ class Flowtbag:
                 return
             elif return_val == 1:
                 #This packet ended the TCP connection. Export it.
-                exportFlow(flow)
+                export_flow(flow)
                 del self.active_flows[flow_tuple]
             elif return_val == 2:
                 # This packet has been added to the wrong flow. This means the
                 # previous flow has ended. We export the old flow, remove it,
                 # and create a new flow.
-                exportFlow(flow)
+                export_flow(flow)
                 del self.active_flows[flow_tuple]
                 self.create_flow(pkt, flow_tuple)
 
